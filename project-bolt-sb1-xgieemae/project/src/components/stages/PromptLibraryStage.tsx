@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Card, Input } from '../ui';
-import { BookMarked, Copy, Search, Star, Plus, Lightbulb } from 'lucide-react';
-import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, type PromptCategory } from '../../config/promptsConfig';
+import { Card, Input, Textarea, Button } from '../ui';
+import { BookMarked, Copy, Search, Star, Plus, Lightbulb, X } from 'lucide-react';
+import { DEFAULT_PROMPTS, PROMPT_CATEGORIES } from '../../config/promptsConfig';
 
 interface Prompt {
   id: string;
@@ -19,6 +19,52 @@ export function PromptLibraryStage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newPrompt, setNewPrompt] = useState({
+    title: '',
+    content: '',
+    category: '',
+    is_favorite: false,
+    isNewCategory: false,
+    newCategoryName: '',
+  });
+  const [formErrors, setFormErrors] = useState<{ title?: string; content?: string; category?: string }>({});
+
+  const seedDefaultPrompts = useCallback(async () => {
+    if (!user) return;
+
+    // Use prompts from shared config, adding user_id for database insertion
+    const defaultPrompts = DEFAULT_PROMPTS.map(prompt => ({
+      user_id: user.id,
+      title: prompt.title,
+      content: prompt.content,
+      category: prompt.category,
+      is_favorite: prompt.is_favorite,
+    }));
+
+    const { data } = await supabase.from('prompts').insert(defaultPrompts).select();
+
+    if (data) {
+      setPrompts(data);
+    }
+  }, [user]);
+
+  const loadPrompts = useCallback(async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('prompts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setPrompts(data);
+    } else {
+      await seedDefaultPrompts();
+    }
+  }, [user, seedDefaultPrompts]);
 
   useEffect(() => {
     if (currentProject) {
@@ -36,42 +82,7 @@ export function PromptLibraryStage() {
         sessionStorage.removeItem('promptLibrarySearch'); // Clear after use
       }
     }
-  }, [currentProject]);
-
-  const loadPrompts = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('prompts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setPrompts(data);
-    } else {
-      await seedDefaultPrompts();
-    }
-  };
-
-  const seedDefaultPrompts = async () => {
-    if (!user) return;
-
-    // Use prompts from shared config, adding user_id for database insertion
-    const defaultPrompts = DEFAULT_PROMPTS.map(prompt => ({
-      user_id: user.id,
-      title: prompt.title,
-      content: prompt.content,
-      category: prompt.category,
-      is_favorite: prompt.is_favorite,
-    }));
-
-    const { data } = await supabase.from('prompts').insert(defaultPrompts).select();
-
-    if (data) {
-      setPrompts(data);
-    }
-  };
+  }, [currentProject, loadPrompts]);
 
   const copyPrompt = async (content: string, promptId: string) => {
     await navigator.clipboard.writeText(content);
@@ -87,10 +98,120 @@ export function PromptLibraryStage() {
     );
   };
 
-  const categories = [
-    { value: 'all', label: 'All Prompts' },
-    ...Object.entries(PROMPT_CATEGORIES).map(([value, label]) => ({ value, label })),
-  ];
+  // Get unique categories from prompts in database
+  const customCategories = useMemo(() => {
+    const categorySet = new Set<string>();
+    prompts.forEach((p) => {
+      if (p.category && !Object.keys(PROMPT_CATEGORIES).includes(p.category)) {
+        categorySet.add(p.category);
+      }
+    });
+    return Array.from(categorySet).map((cat) => ({ value: cat, label: cat }));
+  }, [prompts]);
+
+  // Build dynamic category list
+  const categories = useMemo(() => {
+    const baseCategories = [
+      { value: 'all', label: 'All Prompts' },
+      ...Object.entries(PROMPT_CATEGORIES).map(([value, label]) => ({ value, label })),
+    ];
+    // Add custom categories that aren't in the predefined list
+    return [...baseCategories, ...customCategories];
+  }, [customCategories]);
+
+  const createPrompt = async () => {
+    // Reset errors
+    setFormErrors({});
+
+    // Validation
+    if (!newPrompt.title.trim()) {
+      setFormErrors({ title: 'Title is required' });
+      return;
+    }
+    if (!newPrompt.content.trim()) {
+      setFormErrors({ content: 'Content is required' });
+      return;
+    }
+    const finalCategory = newPrompt.isNewCategory
+      ? newPrompt.newCategoryName.trim()
+      : newPrompt.category;
+    if (!finalCategory) {
+      setFormErrors({ category: 'Category is required' });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('prompts')
+        .insert({
+          user_id: user.id,
+          title: newPrompt.title.trim(),
+          content: newPrompt.content.trim(),
+          category: finalCategory,
+          is_favorite: newPrompt.is_favorite,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating prompt:', error);
+        setFormErrors({ title: 'Failed to create prompt. Please try again.' });
+        return;
+      }
+
+      if (data) {
+        // Refresh prompts list
+        await loadPrompts();
+        // Auto-select the new prompt's category
+        setSelectedCategory(finalCategory);
+        // Close modal and reset form
+        setShowCreateModal(false);
+        setNewPrompt({
+          title: '',
+          content: '',
+          category: '',
+          is_favorite: false,
+          isNewCategory: false,
+          newCategoryName: '',
+        });
+        setFormErrors({});
+      }
+    } catch (error) {
+      console.error('Error creating prompt:', error);
+      setFormErrors({ title: 'Failed to create prompt. Please try again.' });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleOpenCreateModal = () => {
+    setShowCreateModal(true);
+    setNewPrompt({
+      title: '',
+      content: '',
+      category: '',
+      is_favorite: false,
+      isNewCategory: false,
+      newCategoryName: '',
+    });
+    setFormErrors({});
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    setNewPrompt({
+      title: '',
+      content: '',
+      category: '',
+      is_favorite: false,
+      isNewCategory: false,
+      newCategoryName: '',
+    });
+    setFormErrors({});
+  };
 
   const filteredPrompts = prompts.filter((p: Prompt) => {
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
@@ -125,6 +246,10 @@ export function PromptLibraryStage() {
       <Card>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-primary-100">Your Prompts</h2>
+          <Button onClick={handleOpenCreateModal} variant="primary" size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Prompt
+          </Button>
         </div>
 
         <div className="mb-6 space-y-4">
@@ -199,6 +324,151 @@ export function PromptLibraryStage() {
           </div>
         )}
       </Card>
+
+      {/* Create Prompt Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-primary-900 border border-primary-700 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-primary-100">Create New Prompt</h3>
+              <button
+                onClick={handleCloseCreateModal}
+                className="p-1 rounded hover:bg-primary-800 text-primary-400 hover:text-primary-100 transition-colors"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-primary-200 mb-2">
+                  Title <span className="text-red-400">*</span>
+                </label>
+                <Input
+                  value={newPrompt.title}
+                  onChange={(e) => setNewPrompt({ ...newPrompt, title: e.target.value })}
+                  placeholder="Enter prompt title..."
+                  error={formErrors.title}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Content */}
+              <div>
+                <label className="block text-sm font-medium text-primary-200 mb-2">
+                  Content <span className="text-red-400">*</span>
+                </label>
+                <Textarea
+                  value={newPrompt.content}
+                  onChange={(e) => setNewPrompt({ ...newPrompt, content: e.target.value })}
+                  placeholder="Enter prompt content..."
+                  rows={8}
+                  error={formErrors.content}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium text-primary-200 mb-2">
+                  Category <span className="text-red-400">*</span>
+                </label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="radio"
+                      id="existing-category"
+                      name="category-type"
+                      checked={!newPrompt.isNewCategory}
+                      onChange={() => setNewPrompt({ ...newPrompt, isNewCategory: false, newCategoryName: '' })}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <label htmlFor="existing-category" className="text-sm text-primary-300">
+                      Use existing category
+                    </label>
+                  </div>
+                  {!newPrompt.isNewCategory && (
+                    <select
+                      value={newPrompt.category}
+                      onChange={(e) => setNewPrompt({ ...newPrompt, category: e.target.value })}
+                      className="w-full px-3 py-2 bg-primary-800 border border-primary-700 rounded text-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-600"
+                    >
+                      <option value="">Select a category...</option>
+                      {Object.entries(PROMPT_CATEGORIES).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                      {customCategories.map((cat) => (
+                        <option key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="radio"
+                      id="new-category"
+                      name="category-type"
+                      checked={newPrompt.isNewCategory}
+                      onChange={() => setNewPrompt({ ...newPrompt, isNewCategory: true, category: '' })}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <label htmlFor="new-category" className="text-sm text-primary-300">
+                      Create new category
+                    </label>
+                  </div>
+                  {newPrompt.isNewCategory && (
+                    <Input
+                      value={newPrompt.newCategoryName}
+                      onChange={(e) => setNewPrompt({ ...newPrompt, newCategoryName: e.target.value })}
+                      placeholder="Enter new category name..."
+                      error={formErrors.category}
+                      className="w-full"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Favorite Toggle */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is-favorite"
+                  checked={newPrompt.is_favorite}
+                  onChange={(e) => setNewPrompt({ ...newPrompt, is_favorite: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="is-favorite" className="text-sm text-primary-300">
+                  Mark as favorite
+                </label>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 justify-end pt-4 border-t border-primary-700">
+                <Button
+                  variant="ghost"
+                  onClick={handleCloseCreateModal}
+                  disabled={isCreating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={createPrompt}
+                  loading={isCreating}
+                >
+                  Create Prompt
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
