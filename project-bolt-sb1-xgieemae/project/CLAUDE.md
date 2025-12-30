@@ -97,18 +97,19 @@ Developers who use AI coding assistants (Copilot, Claude Code, ChatGPT) and want
 ✅ Settings & MCP Integration hub
 ✅ Responsive dark-themed UI
 ✅ Auto-save functionality
+✅ Integrated terminal with xterm.js + node-pty backend
+✅ Real-time file watching with chokidar
+✅ TaskMaster AI auto-sync (tasks.json)
 
 ## Known Limitations
-- Terminal integration is placeholder only (needs Electron)
 - File system operations use Supabase instead of local files
-- TaskMaster AI integration is manual (not automated)
 - No real-time collaboration features yet
 - No export to local markdown files (only clipboard copy)
+- Terminal backend must be running locally for real command execution
 
 ## Future Enhancements Planned
-- Electron desktop version with integrated terminal
+- Electron desktop version for native installation
 - Direct file system operations (read/write markdown files)
-- TaskMaster AI CLI integration
 - Real-time collaboration features
 - VS Code extension for context syncing
 - AI-powered vision validation

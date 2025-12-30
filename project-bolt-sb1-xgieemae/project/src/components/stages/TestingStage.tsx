@@ -1,26 +1,104 @@
-import React, { useState } from 'react';
-import { Card, Button } from '../ui';
-import { Rocket, CheckCircle2, Circle, Download, Code } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useApp } from '../../contexts/AppContext';
+import { supabase } from '../../lib/supabase';
+import { Card, Button, StageTips } from '../ui';
+import { Rocket, CheckCircle2, Circle, Download } from 'lucide-react';
+
+interface ChecklistItem {
+  id: number;
+  text: string;
+  checked: boolean;
+}
+
+const DEFAULT_CHECKLIST: ChecklistItem[] = [
+  { id: 1, text: 'Happy path works end-to-end', checked: false },
+  { id: 2, text: 'Each feature works in isolation', checked: false },
+  { id: 3, text: 'Error states display appropriately', checked: false },
+  { id: 4, text: 'Works on desktop browsers (Chrome, Firefox, Safari)', checked: false },
+  { id: 5, text: 'Functions properly on mobile devices', checked: false },
+  { id: 6, text: 'Responsive design adapts correctly', checked: false },
+  { id: 7, text: 'Loads within acceptable time limits', checked: false },
+  { id: 8, text: 'Input validation prevents malicious data', checked: false },
+  { id: 9, text: '3+ users completed core workflow without help', checked: false },
+  { id: 10, text: 'Zero critical bugs during user testing', checked: false },
+];
 
 export function TestingStage() {
-  const [checklist, setChecklist] = useState([
-    { id: 1, text: 'Happy path works end-to-end', checked: false },
-    { id: 2, text: 'Each feature works in isolation', checked: false },
-    { id: 3, text: 'Error states display appropriately', checked: false },
-    { id: 4, text: 'Works on desktop browsers (Chrome, Firefox, Safari)', checked: false },
-    { id: 5, text: 'Functions properly on mobile devices', checked: false },
-    { id: 6, text: 'Responsive design adapts correctly', checked: false },
-    { id: 7, text: 'Loads within acceptable time limits', checked: false },
-    { id: 8, text: 'Input validation prevents malicious data', checked: false },
-    { id: 9, text: '3+ users completed core workflow without help', checked: false },
-    { id: 10, text: 'Zero critical bugs during user testing', checked: false },
-  ]);
+  const { currentProject, user } = useApp();
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(DEFAULT_CHECKLIST);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Load checklist from database
+  useEffect(() => {
+    if (currentProject && user) {
+      loadChecklist();
+    }
+  }, [currentProject, user]);
+
+  const loadChecklist = async () => {
+    if (!currentProject || !user) return;
+
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('user_id', user.id)
+      .eq('key', `testing_checklist_${currentProject.id}`)
+      .maybeSingle();
+
+    if (data?.value) {
+      // Merge saved state with default checklist to handle new items
+      const savedChecks = data.value as Record<number, boolean>;
+      setChecklist(DEFAULT_CHECKLIST.map(item => ({
+        ...item,
+        checked: savedChecks[item.id] ?? item.checked
+      })));
+    } else {
+      setChecklist(DEFAULT_CHECKLIST);
+    }
+  };
+
+  // Save checklist to database
+  const saveChecklist = useCallback(async (items: ChecklistItem[]) => {
+    if (!currentProject || !user) return;
+
+    const checksMap = items.reduce((acc, item) => {
+      acc[item.id] = item.checked;
+      return acc;
+    }, {} as Record<number, boolean>);
+
+    const { data: existing } = await supabase
+      .from('settings')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('key', `testing_checklist_${currentProject.id}`)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('settings')
+        .update({ value: checksMap, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('settings').insert({
+        user_id: user.id,
+        key: `testing_checklist_${currentProject.id}`,
+        value: checksMap,
+      });
+    }
+
+    setLastSaved(new Date());
+  }, [currentProject, user]);
 
   const toggleCheck = (id: number) => {
-    setChecklist(checklist.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)));
+    const newChecklist = checklist.map((item) => 
+      item.id === id ? { ...item, checked: !item.checked } : item
+    );
+    setChecklist(newChecklist);
+    saveChecklist(newChecklist);
   };
 
   const completionPercentage = Math.round((checklist.filter((item) => item.checked).length / checklist.length) * 100);
+  const isComplete = completionPercentage >= 80;
 
   const deploymentConfigs = [
     {
@@ -105,10 +183,23 @@ jobs:
         </p>
       </div>
 
+      <StageTips
+        stage="testing"
+        isComplete={isComplete}
+        maxTips={2}
+      />
+
       <Card>
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-xl font-semibold text-primary-100">Validation Checklist</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-primary-100">Validation Checklist</h2>
+              {lastSaved && (
+                <p className="text-xs text-primary-500">
+                  Auto-saved {lastSaved.toLocaleTimeString()}
+                </p>
+              )}
+            </div>
             <span className="text-2xl font-bold text-primary-400">{completionPercentage}%</span>
           </div>
           <div className="w-full bg-primary-800 rounded-full h-2">

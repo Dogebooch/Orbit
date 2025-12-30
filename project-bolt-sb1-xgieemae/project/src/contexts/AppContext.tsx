@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 // Mock user for local/personal use (no authentication required)
 const MOCK_USER: User = {
@@ -21,17 +22,35 @@ interface Project {
   updated_at: string;
 }
 
+export interface StageCompletion {
+  vision: boolean;
+  research: boolean;
+  strategy: boolean;
+  workbench: boolean;
+  testing: boolean;
+}
+
 interface AppContextType {
   user: User | null;
   loading: boolean;
   currentProject: Project | null;
   currentStage: string;
+  stageCompletion: StageCompletion;
   setCurrentProject: (project: Project | null) => void;
   setCurrentStage: (stage: string) => void;
+  refreshStageCompletion: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const DEFAULT_STAGE_COMPLETION: StageCompletion = {
+  vision: false,
+  research: false,
+  strategy: false,
+  workbench: false,
+  testing: false,
+};
 
 export function AppProvider({ children }: { children: ReactNode }) {
   // Use mock user - no authentication required
@@ -39,17 +58,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading] = useState(false);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentStage, setCurrentStage] = useState('vision');
+  const [stageCompletion, setStageCompletion] = useState<StageCompletion>(DEFAULT_STAGE_COMPLETION);
+
+  // Check stage completion status
+  const refreshStageCompletion = useCallback(async () => {
+    if (!currentProject) {
+      setStageCompletion(DEFAULT_STAGE_COMPLETION);
+      return;
+    }
+
+    const completion: StageCompletion = {
+      vision: false,
+      research: false,
+      strategy: false,
+      workbench: false,
+      testing: false,
+    };
+
+    try {
+      // Check Vision stage - has problem and target_user defined
+      const { data: visionData } = await supabase
+        .from('visions')
+        .select('problem, target_user')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+      
+      completion.vision = !!(visionData?.problem && visionData?.target_user);
+
+      // Check Research stage - has at least one research entry
+      const { count: researchCount } = await supabase
+        .from('app_research')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', currentProject.id);
+      
+      completion.research = (researchCount ?? 0) > 0;
+
+      // Check Strategy stage - has PRD content (at least 300 characters)
+      const { data: prdData } = await supabase
+        .from('prds')
+        .select('content')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+      
+      completion.strategy = !!(prdData?.content && prdData.content.length >= 300);
+
+      // Check Workbench stage - has at least one task
+      const { count: taskCount } = await supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', currentProject.id);
+      
+      completion.workbench = (taskCount ?? 0) > 0;
+
+      // Check Testing stage - this could be based on having completed tasks or test results
+      // For now, check if at least 50% of tasks are completed
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('status')
+        .eq('project_id', currentProject.id);
+      
+      if (tasksData && tasksData.length > 0) {
+        const completedCount = tasksData.filter(t => t.status === 'completed').length;
+        completion.testing = completedCount >= Math.ceil(tasksData.length / 2);
+      }
+
+      setStageCompletion(completion);
+    } catch (error) {
+      console.error('Error checking stage completion:', error);
+    }
+  }, [currentProject]);
 
   useEffect(() => {
     if (currentProject) {
       setCurrentStage(currentProject.current_stage);
+      refreshStageCompletion();
     }
-  }, [currentProject]);
+  }, [currentProject, refreshStageCompletion]);
 
   const signOut = async () => {
     // No-op for local use
     setCurrentProject(null);
     setCurrentStage('vision');
+    setStageCompletion(DEFAULT_STAGE_COMPLETION);
   };
 
   const value = {
@@ -57,8 +147,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading,
     currentProject,
     currentStage,
+    stageCompletion,
     setCurrentProject,
     setCurrentStage,
+    refreshStageCompletion,
     signOut,
   };
 

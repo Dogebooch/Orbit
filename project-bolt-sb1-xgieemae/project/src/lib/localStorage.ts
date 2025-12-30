@@ -43,6 +43,8 @@ const KEYS = {
   researchApps: 'orbit_research_apps',
   researchNotes: 'orbit_research_notes',
   researchImages: 'orbit_research_images',
+  projectConfigs: 'orbit_project_configs',
+  aiSettings: 'orbit_ai_settings',
 };
 
 // Types
@@ -187,6 +189,29 @@ export interface ResearchImage {
   caption: string;
   order_index: number;
   created_at: string;
+}
+
+export interface ProjectConfig {
+  id: string;
+  project_id: string;
+  tech_stack_id: string;
+  tech_stack_custom: string | null;
+  coding_standards: Record<string, unknown>;
+  ai_instructions: Record<string, unknown>;
+  custom_sections: Record<string, string>;
+  foundation_data_hash: string;
+  generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AISettings {
+  id: string;
+  user_id: string;
+  gemini_api_key: string | null;
+  enable_codebase_analysis: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // Query builder pattern to mimic Supabase
@@ -455,6 +480,8 @@ export const localDb = {
       research_apps: KEYS.researchApps,
       research_notes: KEYS.researchNotes,
       research_images: KEYS.researchImages,
+      project_configs: KEYS.projectConfigs,
+      ai_settings: KEYS.aiSettings,
     };
 
     const storageKey = keyMap[table];

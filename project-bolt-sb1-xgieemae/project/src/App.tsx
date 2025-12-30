@@ -1,24 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useApp } from './contexts/AppContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ProjectSelector } from './components/layout/ProjectSelector';
 import { VisionStage } from './components/stages/VisionStage';
 import { ResearchStage } from './components/stages/ResearchStage';
+import { StrategyStage } from './components/stages/StrategyStage';
 import { WorkbenchStage } from './components/stages/WorkbenchStage';
 import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
 import { TestingStage } from './components/stages/TestingStage';
 import { SettingsStage } from './components/stages/SettingsStage';
-import { AlertCircle } from 'lucide-react';
+import { DashboardStage } from './components/stages/DashboardStage';
+import { CommandPalette, CommandIcons } from './components/ui';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { AlertCircle, LayoutDashboard } from 'lucide-react';
 
 function App() {
   const { currentProject, currentStage, setCurrentStage } = useApp();
   const [localStage, setLocalStage] = useState(currentStage);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
 
-  const handleStageChange = (stage: string) => {
+  const handleStageChange = useCallback((stage: string) => {
     setLocalStage(stage);
     setCurrentStage(stage);
-  };
+  }, [setCurrentStage]);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onStageChange: handleStageChange,
+    onNewProject: () => setShowNewProject(true),
+    onCommandPalette: () => setShowCommandPalette(true),
+    onEscape: () => {
+      setShowCommandPalette(false);
+      setShowNewProject(false);
+    },
+  });
+
+  // Commands for command palette
+  const commands = [
+    { id: 'dashboard', label: 'Go to Dashboard', description: 'View project overview', icon: LayoutDashboard, action: () => handleStageChange('dashboard'), keywords: ['home', 'overview'] },
+    { id: 'vision', label: 'Go to Foundation', description: 'Vision & User Profile', icon: CommandIcons.Lightbulb, action: () => handleStageChange('vision'), keywords: ['foundation'] },
+    { id: 'research', label: 'Go to Research', description: 'Market & Discovery', icon: CommandIcons.Search, action: () => handleStageChange('research'), keywords: ['market'] },
+    { id: 'strategy', label: 'Go to Strategy', description: 'PRD & Tasks', icon: CommandIcons.ListChecks, action: () => handleStageChange('strategy'), keywords: ['prd', 'tasks'] },
+    { id: 'workbench', label: 'Go to Workbench', description: 'Build & Code', icon: CommandIcons.Code2, action: () => handleStageChange('workbench'), keywords: ['code', 'terminal'] },
+    { id: 'promptlibrary', label: 'Go to Prompt Library', description: 'Saved Prompts', icon: CommandIcons.BookMarked, action: () => handleStageChange('promptlibrary'), keywords: ['prompts'] },
+    { id: 'testing', label: 'Go to Testing', description: 'Ship & Deploy', icon: CommandIcons.Rocket, action: () => handleStageChange('testing'), keywords: ['deploy', 'ship'] },
+    { id: 'settings', label: 'Go to Settings', description: 'Configuration', icon: CommandIcons.Settings, action: () => handleStageChange('settings'), keywords: ['config'] },
+    { id: 'new-project', label: 'Create New Project', description: 'Start a new project', icon: CommandIcons.FolderPlus, action: () => setShowNewProject(true), keywords: ['create', 'add'] },
+  ];
 
   const renderStage = () => {
     if (!currentProject) {
@@ -37,10 +68,14 @@ function App() {
     }
 
     switch (localStage) {
+      case 'dashboard':
+        return <DashboardStage onNavigate={handleStageChange} />;
       case 'vision':
         return <VisionStage />;
       case 'research':
         return <ResearchStage />;
+      case 'strategy':
+        return <StrategyStage />;
       case 'workbench':
         return <WorkbenchStage />;
       case 'promptlibrary':
@@ -50,7 +85,7 @@ function App() {
       case 'settings':
         return <SettingsStage />;
       default:
-        return <VisionStage />;
+        return <DashboardStage onNavigate={handleStageChange} />;
     }
   };
 
@@ -62,13 +97,23 @@ function App() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <ProjectSelector />
+          <ProjectSelector 
+            showNewProjectModal={showNewProject}
+            onNewProjectModalClose={() => setShowNewProject(false)}
+          />
 
           <main className="flex-1 overflow-y-auto p-8">
             {renderStage()}
           </main>
         </div>
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        commands={commands}
+      />
     </AuthGuard>
   );
 }

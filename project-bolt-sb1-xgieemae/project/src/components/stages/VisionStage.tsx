@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Button, Card } from '../ui';
-import { Lightbulb, Download, Wand2, FileEdit, CheckCircle, FileText, ChevronDown } from 'lucide-react';
+import { Button, Card, StageTips, useFirstVisit } from '../ui';
+import { Lightbulb, Download, Wand2, FileEdit, CheckCircle, FileText, ChevronDown, Sparkles, FolderSearch } from 'lucide-react';
 import { GuidedSetup } from './vision/GuidedSetup';
 import { MarkdownEditor } from './vision/MarkdownEditor';
+import { QuickStart } from './vision/QuickStart';
+import { CodebaseScanner } from './vision/CodebaseScanner';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown } from '../../utils/markdownUtils';
+import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
 
 interface VisionData {
   problem: string;
@@ -27,7 +30,7 @@ interface UserProfileData {
   persona_role: string;
 }
 
-type EditMode = 'guided' | 'editor';
+type EditMode = 'guided' | 'editor' | 'quickstart' | 'import';
 
 export function VisionStage() {
   const { currentProject, setCurrentStage } = useApp();
@@ -238,6 +241,7 @@ export function VisionStage() {
   };
 
   const isComplete = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
+  const isFirstVisit = useFirstVisit('vision');
 
   return (
     <div className="space-y-6">
@@ -260,22 +264,45 @@ export function VisionStage() {
         )}
       </div>
 
+      <StageTips
+        stage="vision"
+        isComplete={!!isComplete}
+        isFirstVisit={isFirstVisit}
+        maxTips={2}
+      />
+
       <Card>
         <div className="flex items-center justify-between mb-6 -mx-6 -mt-6 px-6 py-4 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={mode === 'quickstart' ? 'primary' : 'ghost'}
+              onClick={() => setMode('quickstart')}
+              title="Generate foundation with AI"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              AI Quick Start
+            </Button>
+            <Button
+              variant={mode === 'import' ? 'primary' : 'ghost'}
+              onClick={() => setMode('import')}
+              title="Import from existing codebase"
+            >
+              <FolderSearch className="w-4 h-4 mr-2" />
+              Import
+            </Button>
             <Button
               variant={mode === 'guided' ? 'primary' : 'ghost'}
               onClick={() => setMode('guided')}
             >
               <Wand2 className="w-4 h-4 mr-2" />
-              Guided Setup
+              Guided
             </Button>
             <Button
               variant={mode === 'editor' ? 'primary' : 'ghost'}
               onClick={() => setMode('editor')}
             >
               <FileEdit className="w-4 h-4 mr-2" />
-              Editor Mode
+              Editor
             </Button>
           </div>
 
@@ -299,6 +326,21 @@ export function VisionStage() {
                     <div>
                       <span className="text-primary-100 font-medium">Download All</span>
                       <span className="block text-xs text-primary-400">3 files</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={async () => { 
+                      if (currentProject) {
+                        await generateAndDownloadClaudeMd(currentProject.id);
+                      }
+                      setShowDownloadMenu(false); 
+                    }}
+                    className="w-full px-4 py-3 text-left hover:bg-primary-700 transition-colors border-b border-primary-700 flex items-center gap-3"
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <div>
+                      <span className="text-primary-100 font-medium">CLAUDE.md</span>
+                      <span className="block text-xs text-primary-400">AI context file</span>
                     </div>
                   </button>
                   <button
@@ -333,7 +375,51 @@ export function VisionStage() {
           </div>
         </div>
 
-        {mode === 'guided' ? (
+        {mode === 'quickstart' ? (
+          <QuickStart
+            projectName={currentProject?.name || 'My Project'}
+            onGenerate={(data) => {
+              setVision({
+                ...vision,
+                problem: data.vision.problem,
+                target_user: data.vision.target_user,
+                success_metrics: data.vision.success_metrics,
+                why_software: data.vision.why_software,
+              });
+              setUserProfile({
+                ...userProfile,
+                primary_user: data.userProfile.primary_user,
+                goal: data.userProfile.goal,
+                context: data.userProfile.context,
+                frustrations: data.userProfile.frustrations,
+                technical_comfort: data.userProfile.technical_comfort,
+                persona_name: data.userProfile.persona_name,
+                persona_role: data.userProfile.persona_role,
+              });
+              setMode('editor');
+              triggerAutoSave();
+            }}
+          />
+        ) : mode === 'import' ? (
+          <CodebaseScanner
+            onImport={(data) => {
+              setVision({
+                ...vision,
+                problem: data.vision.problem,
+                target_user: data.vision.target_user,
+                success_metrics: data.vision.success_metrics,
+                why_software: data.vision.why_software,
+              });
+              setUserProfile({
+                ...userProfile,
+                primary_user: data.userProfile.primary_user,
+                goal: data.userProfile.goal,
+              });
+              setMode('editor');
+              triggerAutoSave();
+            }}
+          />
+        ) : mode === 'guided' ? (
           <GuidedSetup
             vision={vision}
             userProfile={userProfile}

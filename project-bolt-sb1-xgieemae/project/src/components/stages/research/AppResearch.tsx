@@ -230,9 +230,9 @@ export function AppResearch() {
     }
     await supabase
       .from('projects')
-      .update({ current_stage: 'workbench' })
+      .update({ current_stage: 'strategy' })
       .eq('id', currentProject?.id);
-    setCurrentStage('workbench');
+    setCurrentStage('strategy');
   };
 
   const activeNote = activeAppId ? notes[activeAppId] : null;
@@ -388,7 +388,7 @@ export function AppResearch() {
                 onClick={handleContinue}
                 className="ml-auto px-3 py-2 bg-slate-700 hover:bg-slate-600 text-primary-100 rounded-lg transition-colors text-sm flex items-center gap-2"
               >
-                Continue
+                Continue to Strategy
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

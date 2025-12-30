@@ -1,8 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useApp } from './AppContext';
+import { WebSocketClient, getWebSocketClient, disconnectWebSocket, ConnectionStatus } from '../lib/websocket';
 
-type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+// Types for WebSocket messages from server
+interface ServerMessage {
+  type: string;
+  data?: string;
+  code?: number;
+  path?: string;
+  event?: 'add' | 'change' | 'unlink';
+  tasks?: TaskMasterTask[];
+  connected?: boolean;
+  message?: string;
+}
+
+interface TaskMasterTask {
+  id: number;
+  title: string;
+  description: string;
+  status: 'pending' | 'in-progress' | 'done' | 'blocked';
+  priority: 'high' | 'medium' | 'low';
+  dependencies: number[];
+  subtasks?: TaskMasterTask[];
+}
 
 interface TerminalOutputItem {
   id: string;
@@ -39,7 +60,12 @@ interface FavoriteCommand {
 }
 
 interface TerminalContextType {
+  // Connection state
   connectionStatus: ConnectionStatus;
+  isBackendConnected: boolean;
+  wsClient: { send: (data: unknown) => void } | null;
+  
+  // Terminal state
   outputBuffer: TerminalOutputItem[];
   commandHistory: string[];
   historyIndex: number;
@@ -48,7 +74,15 @@ interface TerminalContextType {
   favoriteCommands: FavoriteCommand[];
   isExecuting: boolean;
   pendingCommand: string;
+  workingDirectory: string;
 
+  // Terminal ref for xterm
+  terminalRef: React.RefObject<HTMLDivElement | null>;
+  
+  // Actions
+  sendInput: (data: string) => void;
+  resizeTerminal: (cols: number, rows: number) => void;
+  setWorkingDirectory: (path: string) => void;
   executeCommand: (command: string) => Promise<void>;
   setCommandInput: (command: string) => void;
   clearOutput: () => void;
@@ -58,6 +92,15 @@ interface TerminalContextType {
   removeFavoriteCommand: (id: string) => Promise<void>;
   loadSessionHistory: () => Promise<void>;
   testConnection: () => Promise<boolean>;
+  connectBackend: () => void;
+  disconnectBackend: () => void;
+
+  // Callbacks for XTerminal
+  onTerminalOutput: ((data: string) => void) | null;
+  setOnTerminalOutput: (callback: (data: string) => void) => void;
+
+  // TaskMaster sync
+  taskMasterTasks: TaskMasterTask[];
 }
 
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined);
@@ -71,7 +114,13 @@ const DEFAULT_PREFERENCES: TerminalPreferences = {
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
   const { user, currentProject } = useApp();
+  
+  // Connection state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const wsClientRef = useRef<WebSocketClient | null>(null);
+  
+  // Terminal state
   const [outputBuffer, setOutputBuffer] = useState<TerminalOutputItem[]>([]);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -80,7 +129,97 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [favoriteCommands, setFavoriteCommands] = useState<FavoriteCommand[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [pendingCommand, setPendingCommand] = useState('');
+  const [workingDirectory, setWorkingDirectoryState] = useState('');
+  
+  // Terminal ref
+  const terminalRef = useRef<HTMLDivElement | null>(null);
+  
+  // Output callback for xterm
+  const [onTerminalOutput, setOnTerminalOutputState] = useState<((data: string) => void) | null>(null);
+  
+  // TaskMaster state
+  const [taskMasterTasks, setTaskMasterTasks] = useState<TaskMasterTask[]>([]);
 
+  // Handle WebSocket messages
+  const handleServerMessage = useCallback((message: ServerMessage) => {
+    switch (message.type) {
+      case 'terminal:output':
+        if (message.data && onTerminalOutput) {
+          onTerminalOutput(message.data);
+        }
+        break;
+        
+      case 'terminal:ready':
+        console.log('[Terminal] PTY ready');
+        break;
+        
+      case 'terminal:exit':
+        console.log(`[Terminal] PTY exited with code ${message.code}`);
+        break;
+        
+      case 'connection:status':
+        setIsBackendConnected(message.connected ?? false);
+        break;
+        
+      case 'config:workingDir':
+        if (message.path) {
+          setWorkingDirectoryState(message.path);
+        }
+        break;
+        
+      case 'file:changed':
+        console.log(`[Watcher] File ${message.event}: ${message.path}`);
+        // Could trigger UI updates here
+        break;
+        
+      case 'tasks:updated':
+        if (message.tasks) {
+          console.log(`[TaskMaster] Received ${message.tasks.length} tasks`);
+          setTaskMasterTasks(message.tasks);
+        }
+        break;
+        
+      case 'error':
+        console.error('[Server Error]', message.message);
+        break;
+        
+      default:
+        console.log('[WebSocket] Unknown message type:', message.type);
+    }
+  }, [onTerminalOutput]);
+
+  // Connect to backend
+  const connectBackend = useCallback(() => {
+    if (wsClientRef.current?.isConnected()) {
+      return;
+    }
+    
+    const client = getWebSocketClient(
+      handleServerMessage,
+      setConnectionStatus
+    );
+    
+    wsClientRef.current = client;
+    client.connect();
+  }, [handleServerMessage]);
+
+  // Disconnect from backend
+  const disconnectBackend = useCallback(() => {
+    disconnectWebSocket();
+    wsClientRef.current = null;
+    setIsBackendConnected(false);
+  }, []);
+
+  // Auto-connect on mount
+  useEffect(() => {
+    connectBackend();
+    
+    return () => {
+      disconnectBackend();
+    };
+  }, []);
+
+  // Load user preferences and favorites
   useEffect(() => {
     if (user) {
       loadPreferences();
@@ -88,12 +227,40 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  // Load/create session when project changes
   useEffect(() => {
     if (currentProject) {
       loadOrCreateSession();
       loadSessionHistory();
     }
   }, [currentProject]);
+
+  // Send input to backend
+  const sendInput = useCallback((data: string) => {
+    if (wsClientRef.current?.isConnected()) {
+      wsClientRef.current.send({ type: 'terminal:input', data });
+    }
+  }, []);
+
+  // Resize terminal
+  const resizeTerminal = useCallback((cols: number, rows: number) => {
+    if (wsClientRef.current?.isConnected()) {
+      wsClientRef.current.send({ type: 'terminal:resize', cols, rows });
+    }
+  }, []);
+
+  // Set working directory
+  const setWorkingDirectory = useCallback((path: string) => {
+    setWorkingDirectoryState(path);
+    if (wsClientRef.current?.isConnected()) {
+      wsClientRef.current.send({ type: 'config:setWorkingDir', path });
+    }
+  }, []);
+
+  // Set terminal output callback
+  const setOnTerminalOutput = useCallback((callback: (data: string) => void) => {
+    setOnTerminalOutputState(() => callback);
+  }, []);
 
   const loadPreferences = async () => {
     if (!user) return;
@@ -155,6 +322,9 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         backendConnected: existingSession.backend_connected,
         workingDirectory: existingSession.working_directory,
       });
+      if (existingSession.working_directory) {
+        setWorkingDirectoryState(existingSession.working_directory);
+      }
     } else {
       const { data: newSession } = await supabase
         .from('terminal_sessions')
@@ -208,9 +378,17 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Execute command (simulated mode fallback)
   const executeCommand = async (command: string) => {
     if (!currentProject || !currentSession || !command.trim()) return;
 
+    // If connected to backend, send through WebSocket
+    if (isBackendConnected) {
+      sendInput(command + '\r');
+      return;
+    }
+
+    // Fallback: simulated mode
     setIsExecuting(true);
     const startTime = Date.now();
 
@@ -265,7 +443,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   git status        Show git status (simulated)
   npm install       Install packages (simulated)
 
-Note: This terminal is in SIMULATED mode. Connect to backend for real command execution.`,
+Note: This terminal is in SIMULATED mode. Start the backend server for real command execution:
+  cd server && npm install && npm run dev`,
         status: 'success',
       };
     }
@@ -276,7 +455,7 @@ Note: This terminal is in SIMULATED mode. Connect to backend for real command ex
 
     if (cmd === 'pwd') {
       return {
-        output: currentSession?.workingDirectory || '/simulated/project/path',
+        output: currentSession?.workingDirectory || workingDirectory || '/simulated/project/path',
         status: 'success',
       };
     }
@@ -288,14 +467,15 @@ node_modules/
 package.json
 README.md
 tsconfig.json
-vite.config.ts`,
+vite.config.ts
+server/`,
         status: 'success',
       };
     }
 
     if (cmd === 'history') {
       return {
-        output: commandHistory.map((cmd, i) => `${i + 1}  ${cmd}`).join('\n'),
+        output: commandHistory.map((c, i) => `${i + 1}  ${c}`).join('\n'),
         status: 'success',
       };
     }
@@ -341,7 +521,7 @@ nothing to commit, working tree clean
     return {
       output: `Command executed: ${command}
 
-(This is a simulated terminal. Connect to backend for real command execution.)`,
+(This is a simulated terminal. Start the backend server for real command execution.)`,
       status: 'success',
     };
   };
@@ -445,15 +625,25 @@ nothing to commit, working tree clean
 
   const testConnection = async (): Promise<boolean> => {
     setConnectionStatus('connecting');
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
+    
+    try {
+      const response = await fetch('http://127.0.0.1:3001/health');
+      if (response.ok) {
+        connectBackend();
+        return true;
+      }
+    } catch {
+      // Backend not available
+    }
+    
     setConnectionStatus('disconnected');
     return false;
   };
 
   const value: TerminalContextType = {
     connectionStatus,
+    isBackendConnected,
+    wsClient: wsClientRef.current,
     outputBuffer,
     commandHistory,
     historyIndex,
@@ -462,6 +652,11 @@ nothing to commit, working tree clean
     favoriteCommands,
     isExecuting,
     pendingCommand,
+    workingDirectory,
+    terminalRef,
+    sendInput,
+    resizeTerminal,
+    setWorkingDirectory,
     executeCommand,
     setCommandInput,
     clearOutput,
@@ -471,6 +666,11 @@ nothing to commit, working tree clean
     removeFavoriteCommand,
     loadSessionHistory,
     testConnection,
+    connectBackend,
+    disconnectBackend,
+    onTerminalOutput,
+    setOnTerminalOutput,
+    taskMasterTasks,
   };
 
   return <TerminalContext.Provider value={value}>{children}</TerminalContext.Provider>;

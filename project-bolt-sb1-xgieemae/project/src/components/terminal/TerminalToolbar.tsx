@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Copy, Download, Settings, Star } from 'lucide-react';
+import { Trash2, Copy, Download, Settings, Star, FolderOpen } from 'lucide-react';
 
 interface TerminalToolbarProps {
   onClear: () => void;
@@ -9,6 +9,8 @@ interface TerminalToolbarProps {
   onToggleFavorites: () => void;
   showSettings: boolean;
   showFavorites: boolean;
+  onTogglePathConfig?: () => void;
+  showPathConfig?: boolean;
 }
 
 export function TerminalToolbar({
@@ -19,6 +21,8 @@ export function TerminalToolbar({
   onToggleFavorites,
   showSettings,
   showFavorites,
+  onTogglePathConfig,
+  showPathConfig,
 }: TerminalToolbarProps) {
   return (
     <div className="border-b border-gray-700 bg-gray-900 px-4 py-2">
@@ -28,6 +32,20 @@ export function TerminalToolbar({
         </div>
 
         <div className="flex items-center gap-1">
+          {onTogglePathConfig && (
+            <button
+              onClick={onTogglePathConfig}
+              className={`p-2 rounded transition-colors ${
+                showPathConfig
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800'
+              }`}
+              title="Set project path"
+            >
+              <FolderOpen className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={onToggleFavorites}
             className={`p-2 rounded transition-colors ${

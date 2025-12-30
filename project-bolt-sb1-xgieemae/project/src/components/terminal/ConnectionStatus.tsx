@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, WifiOff, Loader2, Server, X } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, Server, X, Terminal, CheckCircle } from 'lucide-react';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -34,11 +34,11 @@ export function ConnectionStatus({ status, onTestConnection }: ConnectionStatusP
   const getStatusText = () => {
     switch (status) {
       case 'connected':
-        return 'Connected';
+        return 'Connected to Backend';
       case 'connecting':
         return 'Connecting...';
       case 'error':
-        return 'Error';
+        return 'Connection Error';
       default:
         return 'Disconnected';
     }
@@ -72,6 +72,13 @@ export function ConnectionStatus({ status, onTestConnection }: ConnectionStatusP
               SIMULATED MODE
             </span>
           )}
+          
+          {status === 'connected' && (
+            <span className="text-xs text-green-500 bg-green-900/20 px-2 py-1 rounded flex items-center gap-1">
+              <Terminal className="w-3 h-3" />
+              LIVE TERMINAL
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -80,7 +87,7 @@ export function ConnectionStatus({ status, onTestConnection }: ConnectionStatusP
             disabled={testing || status === 'connecting'}
             className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {testing ? 'Testing...' : 'Test Connection'}
+            {testing ? 'Testing...' : status === 'connected' ? 'Reconnect' : 'Connect'}
           </button>
 
           <button
@@ -107,57 +114,75 @@ export function ConnectionStatus({ status, onTestConnection }: ConnectionStatusP
             </button>
           </div>
 
-          <div className="space-y-3 text-sm text-gray-300">
+          <div className="space-y-4 text-sm text-gray-300">
             <div>
-              <p className="font-medium text-gray-200 mb-2">To enable real command execution:</p>
-              <ol className="list-decimal list-inside space-y-2 pl-2">
-                <li>
-                  <span className="font-medium">Create backend server</span>
-                  <div className="mt-1 ml-6 space-y-1">
-                    <p className="text-xs text-gray-400">Option A: Separate repository with WebSocket server</p>
-                    <p className="text-xs text-gray-400">Option B: Add /server folder to this project</p>
+              <p className="font-medium text-gray-200 mb-3">Quick Start (3 steps):</p>
+              <ol className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                  <div>
+                    <span className="font-medium text-gray-200">Install server dependencies</span>
+                    <div className="mt-1">
+                      <code className="block text-xs bg-gray-900 px-3 py-2 rounded text-green-400 font-mono">
+                        cd server && npm install
+                      </code>
+                    </div>
                   </div>
                 </li>
-                <li>
-                  <span className="font-medium">Install dependencies</span>
-                  <code className="ml-2 text-xs bg-gray-900 px-2 py-1 rounded text-green-400">
-                    npm install ws express
-                  </code>
-                </li>
-                <li>
-                  <span className="font-medium">Implement WebSocket endpoint</span>
-                  <div className="mt-1 ml-6 text-xs text-gray-400">
-                    <p>Listen for command events and execute safely</p>
-                    <p>Send output back to client via WebSocket</p>
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                  <div>
+                    <span className="font-medium text-gray-200">Start the backend server</span>
+                    <div className="mt-1">
+                      <code className="block text-xs bg-gray-900 px-3 py-2 rounded text-green-400 font-mono">
+                        npm run dev
+                      </code>
+                    </div>
                   </div>
                 </li>
-                <li>
-                  <span className="font-medium">Set environment variable</span>
-                  <code className="ml-2 text-xs bg-gray-900 px-2 py-1 rounded text-green-400">
-                    VITE_TERMINAL_WS_URL=ws://localhost:3001
-                  </code>
-                </li>
-                <li>
-                  <span className="font-medium">Start backend server</span>
-                  <code className="ml-2 text-xs bg-gray-900 px-2 py-1 rounded text-green-400">
-                    node server/index.js
-                  </code>
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+                  <div>
+                    <span className="font-medium text-gray-200">Or run both together</span>
+                    <div className="mt-1">
+                      <code className="block text-xs bg-gray-900 px-3 py-2 rounded text-green-400 font-mono">
+                        npm run dev:full
+                      </code>
+                      <p className="text-xs text-gray-500 mt-1">
+                        (from project root - starts frontend + backend)
+                      </p>
+                    </div>
+                  </div>
                 </li>
               </ol>
             </div>
 
             <div className="pt-3 border-t border-gray-700">
-              <p className="text-xs text-gray-400">
-                <strong className="text-gray-300">Security Note:</strong> The backend should validate all commands
-                against a blacklist of dangerous operations before execution. Never execute commands with
-                elevated privileges without explicit user confirmation.
-              </p>
+              <p className="font-medium text-gray-200 mb-2">What you get:</p>
+              <ul className="space-y-1 text-xs text-gray-400">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                  Real terminal with PowerShell (Windows) or Bash (Mac/Linux)
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                  Run Claude Code CLI directly: <code className="bg-gray-900 px-1 rounded">claude</code>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                  File watching for real-time updates
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                  TaskMaster AI integration (syncs tasks.json)
+                </li>
+              </ul>
             </div>
 
-            <div className="pt-2">
-              <p className="text-xs text-blue-400">
-                The terminal will automatically switch from simulated mode to real execution once
-                the backend server is detected.
+            <div className="pt-3 border-t border-gray-700">
+              <p className="text-xs text-gray-500">
+                <strong className="text-gray-400">Note:</strong> The backend runs locally on port 3001.
+                Make sure Claude Code CLI is installed: <code className="bg-gray-900 px-1 rounded">npm install -g @anthropic-ai/claude-code</code>
               </p>
             </div>
           </div>

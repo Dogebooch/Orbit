@@ -15,23 +15,40 @@ import {
   BookOpen,
   Lightbulb,
   ExternalLink,
-  ListChecks
+  ListChecks,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 import { GuidedPRD } from './strategy/GuidedPRD';
+import { TaskParser } from './strategy/TaskParser';
 
 interface VisionData {
   problem: string;
   target_user: string;
   success_metrics: string;
+  why_software?: string;
 }
 
 interface UserProfileData {
   primary_user: string;
   goal: string;
+  frustrations?: string;
+  technical_comfort?: string;
+  persona_name?: string;
+  persona_role?: string;
 }
 
 type ActiveTab = 'prd' | 'integration';
-type PrdMode = 'guided' | 'editor';
+type PrdMode = 'guided' | 'editor' | 'quick';
+
+interface ParsedTask {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
+  acceptanceCriteria: string[];
+  selected: boolean;
+}
 
 export function StrategyStage() {
   const { currentProject, setCurrentStage } = useApp();
@@ -43,6 +60,8 @@ export function StrategyStage() {
   const [userProfile, setUserProfile] = useState<UserProfileData>({ primary_user: '', goal: '' });
   const [copied, setCopied] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | undefined>();
+  const [existingTaskCount, setExistingTaskCount] = useState(0);
+  const [tasksGenerated, setTasksGenerated] = useState(false);
 
   useEffect(() => {
     if (currentProject) {
@@ -55,7 +74,7 @@ export function StrategyStage() {
 
     const { data: visionData } = await supabase
       .from('visions')
-      .select('problem, target_user, success_metrics')
+      .select('problem, target_user, success_metrics, why_software')
       .eq('project_id', currentProject.id)
       .maybeSingle();
 
@@ -65,7 +84,7 @@ export function StrategyStage() {
 
     const { data: profileData } = await supabase
       .from('user_profiles')
-      .select('primary_user, goal')
+      .select('primary_user, goal, frustrations, technical_comfort, persona_name, persona_role')
       .eq('project_id', currentProject.id)
       .maybeSingle();
 
@@ -85,7 +104,151 @@ export function StrategyStage() {
         setPrdMode('editor');
       }
     }
+
+    // Load existing task count
+    const { data: taskData } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('project_id', currentProject.id);
+
+    setExistingTaskCount(taskData?.length ?? 0);
   };
+
+  // Handle tasks generated from PRD parser
+  const handleTasksGenerated = async (tasks: ParsedTask[]) => {
+    if (!currentProject || tasks.length === 0) return;
+
+    const priorityMap = { high: 1, medium: 2, low: 3 };
+    
+    // Get current max order_index
+    const { data: existingTasks } = await supabase
+      .from('tasks')
+      .select('order_index')
+      .eq('project_id', currentProject.id)
+      .order('order_index', { ascending: false })
+      .limit(1);
+
+    const startIndex = (existingTasks?.[0]?.order_index ?? -1) + 1;
+
+    // Insert all tasks
+    const tasksToInsert = tasks.map((task, index) => ({
+      project_id: currentProject.id,
+      title: task.title,
+      description: task.description,
+      status: 'pending' as const,
+      priority: priorityMap[task.priority],
+      acceptance_criteria: task.acceptanceCriteria.join('\n'),
+      notes: '',
+      order_index: startIndex + index,
+    }));
+
+    const { error } = await supabase.from('tasks').insert(tasksToInsert);
+
+    if (!error) {
+      setExistingTaskCount(prev => prev + tasks.length);
+      setTasksGenerated(true);
+      // Auto-dismiss success message after 3 seconds
+      setTimeout(() => setTasksGenerated(false), 3000);
+    }
+  };
+
+  // Auto-generate PRD from foundation data
+  const autoGeneratePRD = () => {
+    const hasFoundation = vision.problem && vision.target_user && userProfile.primary_user;
+    if (!hasFoundation) return;
+
+    const personaSection = userProfile.persona_name 
+      ? `**Persona:** ${userProfile.persona_name}${userProfile.persona_role ? ` (${userProfile.persona_role})` : ''}`
+      : '';
+
+    const frustrationsList = userProfile.frustrations
+      ? userProfile.frustrations.split('\n').map(f => `- ${f.trim()}`).join('\n')
+      : '';
+
+    const generatedPRD = `# Product Requirements Document: ${currentProject?.name || 'Project'}
+
+## 1. Overview
+
+### Problem Statement
+${vision.problem}
+
+### Why Software?
+${vision.why_software || '_Define why a software solution is needed_'}
+
+### Target User
+${vision.target_user}
+
+## 2. User Profile
+
+${personaSection}
+
+**Primary User:** ${userProfile.primary_user}
+
+**User Goal:** ${userProfile.goal}
+
+**Technical Comfort Level:** ${userProfile.technical_comfort || 'Medium'}
+
+${frustrationsList ? `### Pain Points & Frustrations\n${frustrationsList}` : ''}
+
+## 3. Success Criteria
+${vision.success_metrics || '_Define measurable success criteria_'}
+
+## 4. Core Features (MVP)
+
+### Feature 1: [Primary Feature]
+**User Story:** As a ${userProfile.primary_user}, I want to [action] so that [benefit].
+
+**Acceptance Criteria:**
+- [ ] User can...
+- [ ] System validates...
+- [ ] Feedback is provided...
+
+### Feature 2: [Secondary Feature]
+**User Story:** As a ${userProfile.primary_user}, I want to [action] so that [benefit].
+
+**Acceptance Criteria:**
+- [ ] User can...
+- [ ] System handles...
+
+## 5. Technical Stack
+
+_Choose based on your project needs:_
+- **Frontend:** React + Vite / Next.js / Vue
+- **Backend:** Supabase / Node.js + Express / Edge Functions
+- **Database:** Supabase (PostgreSQL) / SQLite / Firebase
+- **Deployment:** Vercel / Netlify / Railway
+
+## 6. Out of Scope (MVP)
+
+- Advanced features for v2
+- Complex integrations
+- Performance optimizations beyond basics
+
+## 7. Implementation Notes
+
+### Design Guidelines
+- Keep the interface simple and focused
+- Match user's technical comfort level (${userProfile.technical_comfort || 'medium'})
+- Provide clear feedback for all actions
+
+### Development Priorities
+1. Core user flow
+2. Essential validation
+3. Basic error handling
+4. Minimal viable styling
+
+---
+
+> Generated from Foundation data in Orbit.
+> Place this file at \`scripts/prd.txt\` for TaskMaster integration.
+`;
+
+    setPrdContent(generatedPRD);
+    setPrdMode('editor');
+    savePRD(generatedPRD);
+  };
+
+  const hasFoundationData = vision.problem && vision.target_user && userProfile.primary_user;
 
   const savePRD = useCallback(async (content?: string) => {
     if (!currentProject) return;
@@ -188,6 +351,29 @@ export function StrategyStage() {
 
       {activeTab === 'prd' && (
         <Card>
+          {/* Quick Generate Banner */}
+          {!prdContent && hasFoundationData && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-700/50 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-600/20 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-200">Auto-Generate PRD</h3>
+                    <p className="text-xs text-blue-300/70">
+                      Create a PRD draft instantly from your Foundation data
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={autoGeneratePRD} variant="primary" className="bg-blue-600 hover:bg-blue-500">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Generate Draft
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-6">
             <div className="flex gap-2">
               <Button
@@ -204,6 +390,16 @@ export function StrategyStage() {
                 <FileEdit className="w-4 h-4 mr-2" />
                 Editor
               </Button>
+              {hasFoundationData && (
+                <Button
+                  variant="ghost"
+                  onClick={autoGeneratePRD}
+                  title="Quick generate PRD from foundation data"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Quick Generate
+                </Button>
+              )}
             </div>
 
             {prdMode === 'editor' && (
@@ -238,18 +434,42 @@ export function StrategyStage() {
               <textarea
                 value={prdContent}
                 onChange={(e) => setPrdContent(e.target.value)}
-                className="w-full min-h-[600px] p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="w-full min-h-[400px] p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400"
                 placeholder="Your PRD will appear here after using the Guided Builder, or write it manually..."
                 spellCheck={false}
               />
+
+              {/* Task Parser */}
+              <TaskParser
+                prdContent={prdContent}
+                onTasksGenerated={handleTasksGenerated}
+                existingTaskCount={existingTaskCount}
+              />
+
+              {/* Success message */}
+              {tasksGenerated && (
+                <div className="p-4 bg-green-900/20 border border-green-700/50 rounded-lg flex items-center gap-3 animate-fade-in">
+                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  <span className="text-green-300">Tasks added successfully! View them in the Workbench.</span>
+                  <Button
+                    variant="ghost"
+                    className="ml-auto text-green-300"
+                    onClick={() => setCurrentStage('workbench')}
+                  >
+                    Go to Workbench
+                    <ArrowRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              )}
 
               <div className="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
                 <div className="flex items-start gap-3">
                   <Lightbulb className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-blue-200">
-                    <strong className="text-blue-300">For Taskmaster AI:</strong> Save this file as{' '}
+                    <strong className="text-blue-300">Pro tip:</strong> Use the "Parse PRD" button above to extract tasks directly,
+                    or save this file as{' '}
                     <code className="px-1.5 py-0.5 bg-blue-900/50 rounded text-blue-300">scripts/prd.txt</code>{' '}
-                    in your project root. Taskmaster will parse it to generate your development tasks.
+                    for TaskMaster CLI integration.
                   </div>
                 </div>
               </div>

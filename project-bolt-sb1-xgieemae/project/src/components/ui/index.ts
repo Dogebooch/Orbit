@@ -2,3 +2,8 @@ export { Button } from './Button';
 export { Input } from './Input';
 export { Textarea } from './Textarea';
 export { Card } from './Card';
+export { TipCard, InfoTip, WarningTip, SuccessTip, ProTip } from './TipCard';
+export type { TipVariant } from './TipCard';
+export { StageTips, useFirstVisit } from './StageTips';
+export { CommandPalette, CommandIcons } from './CommandPalette';
+export { GitReminder } from './GitReminder';

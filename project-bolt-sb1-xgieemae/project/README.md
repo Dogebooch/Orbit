@@ -21,13 +21,19 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
 - **Auto-save**: All changes are automatically saved to Supabase
 
 ### 💻 Stage 3: Workbench (Build & Code)
+- **Integrated Terminal**: Real terminal with xterm.js and PTY backend
+  - Full PowerShell/Bash support
+  - Run Claude Code CLI directly (`claude` command)
+  - Real-time command execution
+  - Graceful fallback to simulated mode when backend offline
 - **Context Clipper**: One-click copy of complete project context for AI assistants
   - Includes: Current task + Vision + User profile + Guidelines
 - **Command Library**: Searchable collection of prompt templates
   - Code review, testing, refactoring, optimization prompts
   - Custom prompt creation and favorites
 - **Active Task Display**: Always see what you're working on
-- **Terminal Placeholder**: Ready for integrated terminal in desktop version
+- **TaskMaster Integration**: Auto-syncs with `.taskmaster/tasks/tasks.json`
+- **File Watching**: Real-time updates when project files change
 
 ### 🚀 Stage 4: Testing & Deployment
 - **Interactive Validation Checklist**: Track testing progress with visual completion meter
@@ -53,6 +59,7 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
 - **Tailwind CSS** with custom Slate/Zinc dark theme
 - **Lucide React** for beautiful, consistent icons
 - **React Context API** for state management
+- **xterm.js** for terminal emulation
 
 ### Backend & Data
 - **Supabase** for:
@@ -60,6 +67,12 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
   - Authentication (email/password)
   - Real-time data synchronization
   - Secure API endpoints
+
+### Terminal Backend (Local Server)
+- **Express** + **WebSocket** for real-time communication
+- **node-pty** for pseudo-terminal (PTY) support
+- **chokidar** for file system watching
+- Runs locally on port 3001
 
 ### Design System
 - **Dark Theme**: Custom Slate/Zinc palette for reduced eye strain
@@ -93,24 +106,52 @@ All tables have:
 
 ### Installation
 
-1. **Install dependencies:**
+1. **Install frontend dependencies:**
    ```bash
    npm install
    ```
 
-2. **Environment variables are already configured** in `.env`:
+2. **Install backend dependencies:**
+   ```bash
+   cd server && npm install
+   ```
+
+3. **Environment variables are already configured** in `.env`:
    - VITE_SUPABASE_URL
    - VITE_SUPABASE_ANON_KEY
 
-3. **Start development server:**
+4. **Start development (frontend + backend together):**
    ```bash
-   npm run dev
+   npm run dev:full
    ```
 
-4. **Build for production:**
+   Or start them separately:
+   ```bash
+   # Terminal 1: Frontend
+   npm run dev
+   
+   # Terminal 2: Backend
+   cd server && npm run dev
+   ```
+
+5. **Build for production:**
    ```bash
    npm run build
    ```
+
+### Terminal Backend
+
+The integrated terminal requires the backend server running locally. Features:
+
+- **Real Terminal**: Full PTY with PowerShell (Windows) or Bash (Mac/Linux)
+- **Claude Code CLI**: Run `claude` directly in the terminal
+- **File Watching**: Automatic updates when files change
+- **TaskMaster Sync**: Auto-syncs with `.taskmaster/tasks/tasks.json`
+
+**Prerequisites for Terminal:**
+- Node.js 18+
+- Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+- (Windows) May need Windows Build Tools for node-pty
 
 ### First-Time Setup
 
@@ -122,23 +163,29 @@ All tables have:
 ## Project Structure
 
 ```
-src/
-├── components/
-│   ├── auth/              # Authentication components
-│   ├── layout/            # Sidebar, ProjectSelector
-│   ├── stages/            # Main stage components
-│   │   ├── VisionStage.tsx
-│   │   ├── StrategyStage.tsx
-│   │   ├── WorkbenchStage.tsx
-│   │   ├── TestingStage.tsx
-│   │   └── SettingsStage.tsx
-│   └── ui/                # Reusable UI components
-├── contexts/              # React Context providers
-├── lib/                   # Supabase client and types
-├── App.tsx               # Main application component
-├── main.tsx              # Application entry point
-└── index.css             # Global styles and Tailwind
-
+project/
+├── server/                # Backend terminal server
+│   ├── src/
+│   │   ├── index.ts      # Express + WebSocket entry
+│   │   ├── terminal.ts   # PTY management
+│   │   ├── watcher.ts    # File system watcher
+│   │   ├── taskmaster.ts # TaskMaster sync
+│   │   └── types.ts      # Shared types
+│   └── package.json
+├── src/
+│   ├── components/
+│   │   ├── auth/         # Authentication components
+│   │   ├── layout/       # Sidebar, ProjectSelector
+│   │   ├── stages/       # Main stage components
+│   │   ├── terminal/     # Terminal UI components
+│   │   ├── workbench/    # Workbench components
+│   │   └── ui/           # Reusable UI components
+│   ├── contexts/         # React Context providers
+│   ├── lib/              # Supabase client, WebSocket
+│   ├── App.tsx           # Main application component
+│   ├── main.tsx          # Application entry point
+│   └── index.css         # Global styles and Tailwind
+└── package.json
 ```
 
 ## Workflow

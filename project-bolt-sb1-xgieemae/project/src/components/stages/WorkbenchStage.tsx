@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
 import { supabase } from '../../lib/supabase';
-import { Button, Card, Input } from '../ui';
+import { Button, Card, Input, StageTips, GitReminder } from '../ui';
 import {
   Code2,
   Copy,
@@ -15,27 +15,45 @@ import {
   FileText,
   BarChart3,
   TrendingUp,
+  Lightbulb,
+  Plus,
+  X,
+  Filter,
+  Download,
+  Sparkles,
+  AlertTriangle,
+  GitBranch,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { TerminalPanel } from '../workbench/TerminalPanel';
 import { TaskMasterCommands } from '../workbench/TaskMasterCommands';
 import { TaskQuickActions } from '../workbench/TaskQuickActions';
+import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
+import {
+  isSubtask,
+  getSubtasks,
+  getBlockingTasks,
+  isTaskBlocked,
+  parseTaskNumber,
+  sortTasksWithSubtasks,
+  type Task as TaskType,
+} from '../../utils/taskUtils';
+import {
+  calculateComplexity,
+  getComplexityColor,
+  formatComplexity,
+  type ComplexityLevel,
+} from '../../utils/complexityScoring';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  priority: number;
-  acceptance_criteria: string;
-  notes: string;
-  order_index: number;
+interface Task extends TaskType {
   created_at: string;
   updated_at: string;
 }
 
 export function WorkbenchStage() {
   const { currentProject, user } = useApp();
-  const { setCommandInput } = useTerminal();
+  const { setCommandInput, isBackendConnected, taskMasterTasks } = useTerminal();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [copiedContext, setCopiedContext] = useState(false);
@@ -47,6 +65,13 @@ export function WorkbenchStage() {
     includeGuidelines: true,
     includeCurrentTask: true,
   });
+  const [showIdeaForm, setShowIdeaForm] = useState(false);
+  const [newIdeaText, setNewIdeaText] = useState('');
+  const [showIdeas, setShowIdeas] = useState(true);
+  const [savingIdea, setSavingIdea] = useState(false);
+  const [showTaskMasterSync, setShowTaskMasterSync] = useState(false);
+  const [importingTasks, setImportingTasks] = useState(false);
+  const [lastCompletedTask, setLastCompletedTask] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentProject) {
@@ -69,12 +94,19 @@ export function WorkbenchStage() {
   };
 
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
+    const task = tasks.find((t) => t.id === taskId);
+    
     await supabase
       .from('tasks')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', taskId);
 
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
+
+    // Show git reminder when task is completed
+    if (newStatus === 'completed' && task) {
+      setLastCompletedTask(task.title);
+    }
   };
 
   const handleTaskMasterCommand = (prompt: string) => {
@@ -114,6 +146,106 @@ export function WorkbenchStage() {
 
   const handleViewTaskDetails = (taskId: string) => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
+  };
+
+  const createFeatureIdea = async () => {
+    if (!currentProject || !newIdeaText.trim()) return;
+
+    setSavingIdea(true);
+    try {
+      const maxOrderIndex = tasks.length > 0 ? Math.max(...tasks.map((t) => t.order_index)) : -1;
+
+      const { data } = await supabase
+        .from('tasks')
+        .insert({
+          project_id: currentProject.id,
+          title: `[IDEA] ${newIdeaText.trim()}`,
+          description: '',
+          status: 'pending',
+          priority: -1, // Low priority for ideas
+          acceptance_criteria: '',
+          notes: 'Feature idea - convert to task when ready to implement',
+          order_index: maxOrderIndex + 1,
+        })
+        .select()
+        .single();
+
+      if (data) {
+        setTasks([...tasks, data]);
+        setNewIdeaText('');
+        setShowIdeaForm(false);
+      }
+    } catch (err) {
+      console.error('Error creating feature idea:', err);
+    } finally {
+      setSavingIdea(false);
+    }
+  };
+
+  const convertIdeaToTask = async (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const newTitle = task.title.replace('[IDEA] ', '');
+    await supabase
+      .from('tasks')
+      .update({
+        title: newTitle,
+        priority: 0,
+        notes: task.notes.replace('Feature idea - convert to task when ready to implement', 'Converted from feature idea'),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', taskId);
+
+    setTasks(tasks.map((t) => (t.id === taskId ? { ...t, title: newTitle, priority: 0 } : t)));
+  };
+
+  // Import tasks from TaskMaster
+  const importTaskMasterTasks = async () => {
+    if (!currentProject || taskMasterTasks.length === 0) return;
+
+    setImportingTasks(true);
+    try {
+      const maxOrderIndex = tasks.length > 0 ? Math.max(...tasks.map((t) => t.order_index)) : -1;
+      
+      // Convert TaskMaster tasks to Orbit format
+      const newTasks = taskMasterTasks
+        .filter((tmTask) => {
+          // Skip if we already have a task with similar title
+          return !tasks.some((t) => 
+            t.title.toLowerCase().includes(tmTask.title.toLowerCase()) ||
+            tmTask.title.toLowerCase().includes(t.title.toLowerCase())
+          );
+        })
+        .map((tmTask, index) => ({
+          project_id: currentProject.id,
+          title: `${tmTask.id}. ${tmTask.title}`,
+          description: tmTask.description,
+          status: tmTask.status === 'done' ? 'completed' : tmTask.status === 'in-progress' ? 'in_progress' : 'pending' as const,
+          priority: tmTask.priority === 'high' ? 2 : tmTask.priority === 'medium' ? 1 : 0,
+          acceptance_criteria: '',
+          notes: `Imported from TaskMaster. Original status: ${tmTask.status}`,
+          order_index: maxOrderIndex + index + 1,
+          dependencies: tmTask.dependencies.map(String),
+        }));
+
+      if (newTasks.length > 0) {
+        const { data } = await supabase
+          .from('tasks')
+          .insert(newTasks)
+          .select();
+
+        if (data) {
+          setTasks([...tasks, ...data]);
+        }
+      }
+
+      setShowTaskMasterSync(false);
+    } catch (err) {
+      console.error('Error importing TaskMaster tasks:', err);
+    } finally {
+      setImportingTasks(false);
+    }
   };
 
   const generateContext = async (taskOnly = false) => {
@@ -215,12 +347,27 @@ Ready to implement the current task with this context in mind.
     setTimeout(() => setCopiedContext(false), 2000);
   };
 
-  const currentTask = tasks.find((t) => t.status === 'in_progress');
-  const pendingTasks = tasks.filter((t) => t.status === 'pending');
-  const completedTasks = tasks.filter((t) => t.status === 'completed');
-  const totalTasks = tasks.length;
+  // Separate feature ideas from regular tasks
+  const isIdea = (task: Task) => task.title.startsWith('[IDEA]');
+  const featureIdeas = tasks.filter((t) => isIdea(t));
+  const regularTasks = tasks.filter((t) => !isIdea(t));
+
+  // Sort tasks with subtasks appearing after their parents
+  const sortedTasks = useMemo(() => sortTasksWithSubtasks(regularTasks), [regularTasks]);
+
+  // Filter main tasks (not subtasks) for the main timeline
+  const mainTasks = useMemo(() => regularTasks.filter((t) => !isSubtask(t)), [regularTasks]);
+
+  const currentTask = regularTasks.find((t) => t.status === 'in_progress');
+  const pendingTasks = mainTasks.filter((t) => t.status === 'pending');
+  const completedTasks = mainTasks.filter((t) => t.status === 'completed');
+  const totalTasks = mainTasks.length;
   const progressPercentage = totalTasks > 0 ? (completedTasks.length / totalTasks) * 100 : 0;
-  const nextTask = pendingTasks[0];
+  
+  // Find the next task that isn't blocked by dependencies
+  const nextTask = useMemo(() => {
+    return pendingTasks.find((t) => !isTaskBlocked(t, regularTasks));
+  }, [pendingTasks, regularTasks]);
 
   return (
     <div className="h-full flex flex-col">
@@ -233,6 +380,82 @@ Ready to implement the current task with this context in mind.
           Integrated terminal with TaskMaster AI workflow and vertical task timeline
         </p>
       </div>
+
+      <StageTips
+        stage="workbench"
+        isBackendConnected={isBackendConnected}
+        maxTips={1}
+      />
+
+      {/* TaskMaster Sync Banner */}
+      {taskMasterTasks.length > 0 && (
+        <div className="mb-4 p-4 bg-cyan-900/20 border border-cyan-500/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="w-5 h-5 text-cyan-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-cyan-300">
+                  TaskMaster Tasks Detected
+                </h3>
+                <p className="text-xs text-cyan-400">
+                  Found {taskMasterTasks.length} tasks from tasks.json
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowTaskMasterSync(!showTaskMasterSync)}
+                className="text-xs text-cyan-300"
+              >
+                {showTaskMasterSync ? 'Hide' : 'View'} Tasks
+              </Button>
+              <Button
+                onClick={importTaskMasterTasks}
+                disabled={importingTasks}
+                className="text-xs bg-cyan-600 hover:bg-cyan-500"
+              >
+                {importingTasks ? 'Importing...' : 'Import All'}
+              </Button>
+            </div>
+          </div>
+          
+          {showTaskMasterSync && (
+            <div className="mt-4 space-y-2 max-h-48 overflow-y-auto">
+              {taskMasterTasks.map((tmTask) => (
+                <div
+                  key={tmTask.id}
+                  className="flex items-center justify-between p-2 bg-primary-800/50 rounded text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-400 font-mono">#{tmTask.id}</span>
+                    <span className="text-primary-200">{tmTask.title}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      tmTask.status === 'done' 
+                        ? 'bg-green-900/50 text-green-400'
+                        : tmTask.status === 'in-progress'
+                        ? 'bg-blue-900/50 text-blue-400'
+                        : 'bg-primary-700 text-primary-400'
+                    }`}>
+                      {tmTask.status}
+                    </span>
+                    {tmTask.priority === 'high' && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-900/50 text-red-400">
+                        High
+                      </span>
+                    )}
+                  </div>
+                  {tmTask.dependencies.length > 0 && (
+                    <span className="text-[10px] text-primary-500">
+                      Deps: {tmTask.dependencies.join(', ')}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 flex gap-6 min-h-0">
         <div className="flex-1 flex flex-col gap-6 min-w-0">
@@ -330,13 +553,28 @@ Ready to implement the current task with this context in mind.
                 </Button>
               </div>
 
-              <button
-                onClick={() => setShowContextPreview(!showContextPreview)}
-                className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
-              >
-                <Eye className="w-3 h-3" />
-                {showContextPreview ? 'Hide' : 'Show'} Preview
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowContextPreview(!showContextPreview)}
+                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                >
+                  <Eye className="w-3 h-3" />
+                  {showContextPreview ? 'Hide' : 'Show'} Preview
+                </button>
+                
+                <Button
+                  variant="ghost"
+                  className="text-xs py-1"
+                  onClick={async () => {
+                    if (currentProject) {
+                      await generateAndDownloadClaudeMd(currentProject.id);
+                    }
+                  }}
+                >
+                  <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
+                  Export CLAUDE.md
+                </Button>
+              </div>
 
               {showContextPreview && (
                 <div className="mt-2 p-3 bg-primary-900/50 rounded-lg border border-primary-700/50">
@@ -406,14 +644,71 @@ Ready to implement the current task with this context in mind.
           {/* Task Timeline */}
           <Card className="flex-1 flex flex-col min-h-0">
             <div className="mb-4">
-              <h2 className="text-xl font-semibold text-primary-100 mb-1 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary-400" />
-                Task Timeline
-              </h2>
-              <p className="text-xs text-primary-400">
-                {pendingTasks.length} pending · {completedTasks.length} completed
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-xl font-semibold text-primary-100 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary-400" />
+                  Task Timeline
+                </h2>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowIdeaForm(!showIdeaForm)}
+                  className="text-xs py-1 px-2"
+                >
+                  <Lightbulb className="w-4 h-4 mr-1 text-yellow-400" />
+                  Add Idea
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-primary-400">
+                  {pendingTasks.length} pending · {completedTasks.length} completed · {featureIdeas.length} ideas
+                </p>
+                {featureIdeas.length > 0 && (
+                  <button
+                    onClick={() => setShowIdeas(!showIdeas)}
+                    className={`text-xs flex items-center gap-1 transition-colors ${showIdeas ? 'text-yellow-400' : 'text-primary-500'}`}
+                  >
+                    <Filter className="w-3 h-3" />
+                    {showIdeas ? 'Hide' : 'Show'} Ideas
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Quick Idea Capture Form */}
+            {showIdeaForm && (
+              <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 text-yellow-400" />
+                  <span className="text-sm font-medium text-yellow-300">Quick Feature Idea</span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newIdeaText}
+                    onChange={(e) => setNewIdeaText(e.target.value)}
+                    placeholder="Describe your feature idea..."
+                    className="flex-1 text-sm bg-primary-900"
+                    onKeyDown={(e) => e.key === 'Enter' && createFeatureIdea()}
+                  />
+                  <Button
+                    onClick={createFeatureIdea}
+                    disabled={!newIdeaText.trim() || savingIdea}
+                    className="text-xs"
+                  >
+                    {savingIdea ? '...' : <Plus className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => { setShowIdeaForm(false); setNewIdeaText(''); }}
+                    className="text-xs px-2"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-yellow-400/70 mt-2">
+                  Ideas are saved separately. Convert to a task when ready to implement.
+                </p>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto pr-2 space-y-3" style={{ maxHeight: 'calc(100vh - 280px)' }}>
               {currentTask && (
@@ -479,72 +774,190 @@ Ready to implement the current task with this context in mind.
                 </div>
               )}
 
-              {pendingTasks.map((task, index) => (
-                <div key={task.id} className="relative group">
-                  {index < pendingTasks.length - 1 && (
-                    <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-primary-700"></div>
-                  )}
-                  <div
-                    className="bg-primary-800/40 border border-primary-700 rounded-lg p-4 relative cursor-pointer hover:bg-primary-800/60 transition-colors"
-                    onClick={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateTaskStatus(task.id, 'in_progress');
-                        }}
-                        className="flex-shrink-0 w-8 h-8 rounded-full border-2 border-primary-600 bg-primary-900 flex items-center justify-center hover:border-blue-500 hover:bg-blue-900/30 transition-colors"
-                      >
-                        <Circle className="w-4 h-4 text-primary-500" />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-primary-100 text-sm">{task.title}</h3>
-                        {task.description && (
-                          <p className="text-xs text-primary-400 mt-1 line-clamp-2">{task.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <TaskQuickActions
-                          task={task}
-                          onImplement={handleImplementTask}
-                          onBreakDown={handleBreakDownTask}
-                          onViewDetails={handleViewTaskDetails}
-                          isExpanded={false}
-                        />
-                        {expandedTaskId === task.id ? (
-                          <ChevronUp className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                        )}
-                      </div>
-                    </div>
-                    {expandedTaskId === task.id && (
-                      <div className="mt-4 pt-4 border-t border-primary-700/50 space-y-3">
-                        {task.acceptance_criteria && (
-                          <div>
-                            <p className="text-xs font-medium text-primary-300 mb-1">Acceptance Criteria</p>
-                            <p className="text-xs text-primary-400 whitespace-pre-line">{task.acceptance_criteria}</p>
-                          </div>
-                        )}
-                        {task.notes && (
-                          <div>
-                            <p className="text-xs font-medium text-primary-300 mb-1">Notes</p>
-                            <p className="text-xs text-primary-500 whitespace-pre-line">{task.notes}</p>
-                          </div>
-                        )}
-                        <TaskQuickActions
-                          task={task}
-                          onImplement={handleImplementTask}
-                          onBreakDown={handleBreakDownTask}
-                          onViewDetails={handleViewTaskDetails}
-                          isExpanded={true}
-                        />
-                      </div>
+              {pendingTasks.map((task, index) => {
+                const taskBlocked = isTaskBlocked(task, regularTasks);
+                const blockingTasks = getBlockingTasks(task, regularTasks);
+                const subtasks = getSubtasks(task, regularTasks);
+                const taskNumber = parseTaskNumber(task.title);
+                const complexity = calculateComplexity(task, regularTasks);
+
+                return (
+                  <div key={task.id} className="relative group">
+                    {index < pendingTasks.length - 1 && (
+                      <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-primary-700"></div>
                     )}
+                    <div
+                      className={`rounded-lg p-4 relative cursor-pointer transition-colors ${
+                        taskBlocked
+                          ? 'bg-amber-900/20 border border-amber-700/50 hover:bg-amber-900/30'
+                          : 'bg-primary-800/40 border border-primary-700 hover:bg-primary-800/60'
+                      }`}
+                      onClick={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!taskBlocked) {
+                              updateTaskStatus(task.id, 'in_progress');
+                            }
+                          }}
+                          disabled={taskBlocked}
+                          className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            taskBlocked
+                              ? 'border-amber-600 bg-amber-900/30 cursor-not-allowed'
+                              : 'border-primary-600 bg-primary-900 hover:border-blue-500 hover:bg-blue-900/30'
+                          }`}
+                          title={taskBlocked ? `Blocked by: ${blockingTasks.map(t => t.title).join(', ')}` : 'Start task'}
+                        >
+                          {taskBlocked ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          ) : (
+                            <Circle className="w-4 h-4 text-primary-500" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {taskNumber && (
+                              <span className="text-xs font-mono text-primary-500">#{taskNumber.display}</span>
+                            )}
+                            <h3 className="font-medium text-primary-100 text-sm">{task.title}</h3>
+                            <span 
+                              className={`text-[10px] px-1.5 py-0.5 rounded border ${getComplexityColor(complexity.level)}`}
+                              title={`Complexity: ${formatComplexity(complexity.level)} (${complexity.score}/${complexity.maxScore})`}
+                            >
+                              {formatComplexity(complexity.level)}
+                            </span>
+                          </div>
+                          {task.description && (
+                            <p className="text-xs text-primary-400 mt-1 line-clamp-2">{task.description}</p>
+                          )}
+                          {taskBlocked && (
+                            <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Blocked by {blockingTasks.length} task{blockingTasks.length > 1 ? 's' : ''}
+                            </p>
+                          )}
+                          {subtasks.length > 0 && (
+                            <p className="text-xs text-primary-500 mt-1 flex items-center gap-1">
+                              <GitBranch className="w-3 h-3" />
+                              {subtasks.length} subtask{subtasks.length > 1 ? 's' : ''}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <TaskQuickActions
+                            task={task}
+                            onImplement={handleImplementTask}
+                            onBreakDown={handleBreakDownTask}
+                            onViewDetails={handleViewTaskDetails}
+                            isExpanded={false}
+                          />
+                          {expandedTaskId === task.id ? (
+                            <ChevronUp className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                      {expandedTaskId === task.id && (
+                        <div className="mt-4 pt-4 border-t border-primary-700/50 space-y-3">
+                          {/* Blocking tasks warning */}
+                          {taskBlocked && blockingTasks.length > 0 && (
+                            <div className="p-2 bg-amber-900/30 border border-amber-700/50 rounded-lg">
+                              <p className="text-xs font-medium text-amber-300 mb-1">Blocked by:</p>
+                              <ul className="text-xs text-amber-400 space-y-0.5">
+                                {blockingTasks.map((bt) => (
+                                  <li key={bt.id} className="flex items-center gap-1">
+                                    <Circle className="w-2 h-2" />
+                                    {bt.title}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {/* Subtasks */}
+                          {subtasks.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-primary-300 mb-2 flex items-center gap-1">
+                                <GitBranch className="w-3 h-3" />
+                                Subtasks
+                              </p>
+                              <div className="space-y-1 pl-2 border-l-2 border-primary-700">
+                                {subtasks.map((subtask) => {
+                                  const subTaskNumber = parseTaskNumber(subtask.title);
+                                  return (
+                                    <div
+                                      key={subtask.id}
+                                      className={`flex items-center gap-2 p-2 rounded text-xs ${
+                                        subtask.status === 'completed'
+                                          ? 'bg-green-900/20 text-green-300'
+                                          : subtask.status === 'in_progress'
+                                          ? 'bg-blue-900/20 text-blue-300'
+                                          : 'bg-primary-800/50 text-primary-300'
+                                      }`}
+                                    >
+                                      {subtask.status === 'completed' ? (
+                                        <Check className="w-3 h-3" />
+                                      ) : subtask.status === 'in_progress' ? (
+                                        <PlayCircle className="w-3 h-3" />
+                                      ) : (
+                                        <Circle className="w-3 h-3" />
+                                      )}
+                                      {subTaskNumber && (
+                                        <span className="font-mono text-primary-500">#{subTaskNumber.display}</span>
+                                      )}
+                                      <span className={subtask.status === 'completed' ? 'line-through' : ''}>
+                                        {subtask.title.replace(/^\d+\.\d+\.?\s*/, '')}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {task.acceptance_criteria && (
+                            <div>
+                              <p className="text-xs font-medium text-primary-300 mb-1">Acceptance Criteria</p>
+                              <p className="text-xs text-primary-400 whitespace-pre-line">{task.acceptance_criteria}</p>
+                            </div>
+                          )}
+                          {task.notes && (
+                            <div>
+                              <p className="text-xs font-medium text-primary-300 mb-1">Notes</p>
+                              <p className="text-xs text-primary-500 whitespace-pre-line">{task.notes}</p>
+                            </div>
+                          )}
+                          
+                          {/* Complexity Analysis */}
+                          {complexity.level !== 'low' && complexity.suggestions.length > 0 && (
+                            <div className={`p-2 rounded-lg border ${getComplexityColor(complexity.level)}`}>
+                              <p className="text-xs font-medium mb-1">
+                                Complexity: {formatComplexity(complexity.level)} ({complexity.score}/{complexity.maxScore})
+                              </p>
+                              <ul className="text-xs space-y-0.5 opacity-80">
+                                {complexity.suggestions.map((suggestion, idx) => (
+                                  <li key={idx}>• {suggestion}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          <TaskQuickActions
+                            task={task}
+                            onImplement={handleImplementTask}
+                            onBreakDown={handleBreakDownTask}
+                            onViewDetails={handleViewTaskDetails}
+                            isExpanded={true}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {completedTasks.length > 0 && (
                 <>
@@ -568,17 +981,69 @@ Ready to implement the current task with this context in mind.
                 </>
               )}
 
-              {tasks.length === 0 && (
+              {/* Feature Ideas Section */}
+              {showIdeas && featureIdeas.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 py-2">
+                    <div className="flex-1 h-px bg-yellow-700/50"></div>
+                    <span className="text-xs font-medium text-yellow-500 flex items-center gap-1">
+                      <Lightbulb className="w-3 h-3" />
+                      IDEAS ({featureIdeas.length})
+                    </span>
+                    <div className="flex-1 h-px bg-yellow-700/50"></div>
+                  </div>
+                  {featureIdeas.map((idea) => (
+                    <div key={idea.id} className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-700/50 flex items-center justify-center">
+                          <Lightbulb className="w-3 h-3 text-yellow-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-yellow-300 text-sm">
+                            {idea.title.replace('[IDEA] ', '')}
+                          </h3>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          onClick={() => convertIdeaToTask(idea.id)}
+                          className="text-xs py-1 px-2 text-yellow-400 hover:text-yellow-300"
+                        >
+                          Convert to Task
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {regularTasks.length === 0 && featureIdeas.length === 0 && (
                 <div className="text-center py-12">
                   <Circle className="w-12 h-12 text-primary-600 mx-auto mb-3" />
                   <p className="text-primary-400 text-sm">No tasks yet</p>
                   <p className="text-xs text-primary-500 mt-2">Use TaskMaster commands to generate tasks from your PRD</p>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowIdeaForm(true)}
+                    className="mt-3 text-xs text-yellow-400"
+                  >
+                    <Lightbulb className="w-4 h-4 mr-1" />
+                    Or capture a feature idea
+                  </Button>
                 </div>
               )}
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Git Reminder Modal */}
+      {lastCompletedTask && (
+        <GitReminder
+          taskTitle={lastCompletedTask}
+          onDismiss={() => setLastCompletedTask(null)}
+          autoDismissMs={10000}
+        />
+      )}
     </div>
   );
 }

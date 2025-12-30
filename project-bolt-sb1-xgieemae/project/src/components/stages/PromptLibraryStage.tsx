@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Card } from '../ui';
-import { BookMarked, Copy, Search, Star } from 'lucide-react';
+import { Card, Input } from '../ui';
+import { BookMarked, Copy, Search, Star, Plus, Lightbulb } from 'lucide-react';
 
 interface Prompt {
   id: string;
@@ -45,6 +45,74 @@ export function PromptLibraryStage() {
     if (!user) return;
 
     const defaultPrompts = [
+      // PRD & Requirements Category
+      {
+        user_id: user.id,
+        title: 'Create Functional Requirements',
+        content:
+          'I would like to create concise functional requirements for the following application:\n\n[DESCRIBE YOUR APP]\n\nBe sure to include:\n- App name\n- Tech stack\n- Core features\n- Database needs\n- API integrations\n- Design style\n- Things NOT to build\n\nOutput as markdown code.',
+        category: 'prd',
+        is_favorite: true,
+      },
+      {
+        user_id: user.id,
+        title: 'Generate PRD from Requirements',
+        content:
+          'You are an expert technical product manager. Generate a detailed PRD based on these requirements:\n\n[PASTE REQUIREMENTS]\n\nInclude:\n1. Introduction & Overview\n2. Product Overview\n3. Goals and Objectives\n4. Target Audience\n5. Features and Requirements\n6. User Stories with Acceptance Criteria (use IDs like ST-101)\n7. Technical Requirements / Stack\n8. Design and User Interface\n\nPresent the final PRD in markdown format.',
+        category: 'prd',
+        is_favorite: true,
+      },
+
+      // TaskMaster Category
+      {
+        user_id: user.id,
+        title: 'Parse PRD & Create Tasks',
+        content:
+          "I've initialized a new project with Claude Task Master. I have a PRD at scripts/prd.txt.\nCan you parse it and set up initial tasks?",
+        category: 'taskmaster',
+        is_favorite: true,
+      },
+      {
+        user_id: user.id,
+        title: 'Analyze Task Complexity',
+        content:
+          'Can you analyze the complexity of our tasks to help me understand which ones need to be broken down further?',
+        category: 'taskmaster',
+        is_favorite: true,
+      },
+      {
+        user_id: user.id,
+        title: 'Break Down Complex Tasks',
+        content:
+          'Can you help me break down all of the high complexity tasks?',
+        category: 'taskmaster',
+        is_favorite: false,
+      },
+      {
+        user_id: user.id,
+        title: 'Show All Tasks',
+        content: 'Show tasks',
+        category: 'taskmaster',
+        is_favorite: false,
+      },
+      {
+        user_id: user.id,
+        title: 'Get Next Task',
+        content:
+          "What's the next task I should work on? Please consider dependencies and priorities.",
+        category: 'taskmaster',
+        is_favorite: false,
+      },
+      {
+        user_id: user.id,
+        title: 'Add New Task',
+        content:
+          "Let's add a new task. We should implement [FEATURE_NAME].\nHere are the requirements:\n\n- Requirement 1\n- Requirement 2\n- Requirement 3",
+        category: 'taskmaster',
+        is_favorite: false,
+      },
+
+      // Code Review Category
       {
         user_id: user.id,
         title: 'Code Review',
@@ -53,36 +121,104 @@ export function PromptLibraryStage() {
         category: 'review',
         is_favorite: true,
       },
+
+      // Testing Category
       {
         user_id: user.id,
-        title: 'Generate Tests',
+        title: 'Generate Comprehensive Tests',
         content:
-          'Generate comprehensive tests for the current code:\n- Unit tests for core functions\n- Integration tests for workflows\n- Edge case scenarios\n- Error handling tests\n\nUse the project\'s testing framework.',
+          "Please create comprehensive tests for the current application:\n\n- Unit tests for core business logic functions\n- Integration tests for the main user workflows\n- Error handling tests for edge cases\n- Performance tests for file processing\n\nUse [your preferred testing framework] and include both positive and negative test cases.",
         category: 'testing',
         is_favorite: true,
       },
       {
         user_id: user.id,
+        title: 'User Testing Script',
+        content:
+          '## User Test Script\n\n### Setup\n"I\'d like you to try using this tool. I\'m testing the tool, not you, so there are no wrong answers. Please think out loud as you use it."\n\n### Task\n"Your goal is to [REALISTIC TASK]. Take your time and let me know if anything is confusing."\n\n### Observation Points\n- Do they understand what the tool does?\n- Can they complete the primary task without help?\n- Where do they hesitate or show confusion?\n- What do they say out loud while using it?',
+        category: 'testing',
+        is_favorite: false,
+      },
+
+      // Refactoring Category
+      {
+        user_id: user.id,
         title: 'Refactor for Simplicity',
         content:
-          'Refactor this code to be simpler and more maintainable:\n- Remove unnecessary complexity\n- Extract reusable functions\n- Improve naming\n- Add comments where logic isn\'t obvious\n\nKeep the same functionality.',
+          "Refactor this code to be simpler and more maintainable:\n- Remove unnecessary complexity\n- Extract reusable functions\n- Improve naming\n- Add comments where logic isn't obvious\n\nKeep the same functionality.",
         category: 'refactor',
         is_favorite: false,
       },
       {
         user_id: user.id,
-        title: 'Add Error Handling',
+        title: 'Break Down Large File',
         content:
-          'Add comprehensive error handling:\n- Try-catch blocks where needed\n- User-friendly error messages\n- Logging for debugging\n- Graceful fallbacks\n\nEnsure the app doesn\'t crash on errors.',
-        category: 'improvement',
+          'Break down this file into logical modules so it\'s easier to read.\nCreate directories if needed and move utils and interfaces to separate files, maintaining a domain-driven file structure.',
+        category: 'refactor',
         is_favorite: false,
       },
+
+      // Debugging Category
+      {
+        user_id: user.id,
+        title: 'Create Bug Fix Task',
+        content:
+          'The [FEATURE] is not working as expected. Create a new task to fix it:\n\n- Expected behavior: [WHAT SHOULD HAPPEN]\n- Actual behavior: [WHAT IS HAPPENING]\n- Steps to reproduce: [HOW TO TRIGGER THE BUG]\n\nRequirements for the fix:\n- [Requirement 1]\n- [Requirement 2]',
+        category: 'debugging',
+        is_favorite: true,
+      },
+      {
+        user_id: user.id,
+        title: 'Add Error Handling',
+        content:
+          "Add comprehensive error handling:\n- Try-catch blocks where needed\n- User-friendly error messages\n- Logging for debugging\n- Graceful fallbacks\n\nEnsure the app doesn't crash on errors.",
+        category: 'debugging',
+        is_favorite: false,
+      },
+
+      // Optimization Category
       {
         user_id: user.id,
         title: 'Optimize Performance',
         content:
           'Analyze and optimize performance:\n- Identify bottlenecks\n- Reduce unnecessary renders/calculations\n- Implement caching where appropriate\n- Optimize database queries\n\nMeasure before and after.',
         category: 'optimization',
+        is_favorite: false,
+      },
+
+      // Context Category
+      {
+        user_id: user.id,
+        title: 'Analyze User Feedback',
+        content:
+          "Based on user testing, here's what I observed:\n\nUser 1: [Specific behaviors and comments]\nUser 2: [Specific behaviors and comments]\n\nCommon patterns:\n- [Issue that multiple users hit]\n- [Unexpected user behavior]\n\nPlease analyze this feedback and suggest:\n1. Critical UX improvements needed\n2. Changes to improve user success rate",
+        category: 'context',
+        is_favorite: false,
+      },
+      {
+        user_id: user.id,
+        title: 'Challenge My Assumptions',
+        content:
+          "I'm building [APP DESCRIPTION]. Before I start coding, please challenge my assumptions:\n\n**Problem:** [PROBLEM STATEMENT]\n**Target User:** [USER DESCRIPTION]\n**Why Software:** [WHY THIS NEEDS TO BE BUILT]\n\nAsk me tough questions about:\n- Is this the right problem to solve?\n- Are there existing solutions I'm missing?\n- What could go wrong with this approach?\n- What am I not considering?",
+        category: 'context',
+        is_favorite: true,
+      },
+
+      // Implementation Category
+      {
+        user_id: user.id,
+        title: 'Implement Feature (Simple)',
+        content:
+          'I need to implement [SPECIFIC FEATURE].\n\nRequirements:\n- [Requirement 1]\n- [Requirement 2]\n- [Requirement 3]\n\nPlease analyze these requirements and suggest the simplest solution that works. Avoid over-engineering.',
+        category: 'implementation',
+        is_favorite: false,
+      },
+      {
+        user_id: user.id,
+        title: 'Implementation Options',
+        content:
+          'I need to implement [SPECIFIC FEATURE]. Please analyze these requirements and suggest 3 approaches:\n\nRequirements:\n- [List specific needs]\n\nFor each approach, explain:\n1. Implementation complexity\n2. User experience impact\n3. Maintenance considerations\n4. Pros and cons\n\nI\'ll choose one and you can implement it.',
+        category: 'implementation',
         is_favorite: false,
       },
     ];
@@ -110,11 +246,15 @@ export function PromptLibraryStage() {
 
   const categories = [
     { value: 'all', label: 'All Prompts' },
+    { value: 'prd', label: 'PRD & Requirements' },
+    { value: 'taskmaster', label: 'TaskMaster' },
     { value: 'review', label: 'Code Review' },
     { value: 'testing', label: 'Testing' },
     { value: 'refactor', label: 'Refactoring' },
-    { value: 'improvement', label: 'Improvements' },
+    { value: 'debugging', label: 'Debugging' },
     { value: 'optimization', label: 'Optimization' },
+    { value: 'context', label: 'Context' },
+    { value: 'implementation', label: 'Implementation' },
   ];
 
   const filteredPrompts = prompts.filter((p: Prompt) => {
@@ -134,8 +274,17 @@ export function PromptLibraryStage() {
           Prompt Library
         </h1>
         <p className="text-primary-400 mt-2">
-          Save and reuse common prompts for code review, testing, refactoring, and more
+          Field-tested prompts from the Vibe Coding and TaskMaster guides. Click to copy and paste into Claude Code, Copilot, or any AI assistant.
         </p>
+      </div>
+
+      <div className="mb-6 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+        <div className="flex items-start gap-3">
+          <Lightbulb className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-amber-200/80">
+            <strong className="text-amber-300">Pro Tip:</strong> Start with PRD prompts in the Strategy stage, then use TaskMaster prompts in the Workbench. The [BRACKETS] indicate where you should fill in your specific details.
+          </div>
+        </div>
       </div>
 
       <Card>
