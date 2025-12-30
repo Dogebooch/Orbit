@@ -46,14 +46,6 @@ const PREREQUISITES: PrerequisiteItem[] = [
     helpLink: 'https://console.anthropic.com/',
     helpText: 'Get your API key from console.anthropic.com',
   },
-  {
-    id: 'scaffolded_project',
-    label: 'Project scaffolded with Bolt.new or CLI',
-    description: 'You need a working codebase before using AI tools',
-    icon: Rocket,
-    helpLink: 'https://bolt.new',
-    helpText: 'Open Bolt.new to create your starter project',
-  },
 ];
 
 export function SetupStage() {
@@ -62,7 +54,6 @@ export function SetupStage() {
     nodejs: false,
     claude_cli: false,
     api_key: false,
-    scaffolded_project: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -157,25 +148,19 @@ export function SetupStage() {
         </p>
       </div>
 
-      {/* Critical Warning */}
-      <div className="p-6 rounded-xl border-2 bg-red-900/30 border-red-600/50">
+      {/* Important Note */}
+      <div className="p-6 rounded-xl border-2 bg-blue-900/30 border-blue-600/50">
         <div className="flex gap-4 items-start">
-          <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="w-6 h-6 text-blue-400 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="mb-2 text-lg font-semibold text-red-300">
-              Don't Start from an Empty Codebase!
+            <h3 className="mb-2 text-lg font-semibold text-blue-300">
+              Workflow Reminder
             </h3>
-            <p className="mb-3 text-sm text-red-200/80">
-              AI coding tools work best when you already have a scaffolded project with:
+            <p className="mb-3 text-sm text-blue-200/80">
+              According to the DougHub guide, you'll scaffold your project in <strong>Phase 2</strong> (after completing Foundation Documents in Phase 1). For now, just ensure you have the tools above ready.
             </p>
-            <ul className="ml-4 space-y-1 text-sm text-red-200/70">
-              <li>• package.json with dependencies</li>
-              <li>• Framework setup (Next.js, Vite, etc.)</li>
-              <li>• TypeScript configuration</li>
-              <li>• ESLint and TailwindCSS configured</li>
-            </ul>
-            <p className="mt-3 text-sm text-red-200/80">
-              Use a CLI scaffolding tool or <strong className="text-red-300">Bolt.new</strong> to create your starter template first.
+            <p className="text-sm text-blue-200/80">
+              <strong className="text-blue-300">Phase 1</strong> focuses on writing foundation documents (vision, user profile, metrics) <strong>before any code exists</strong>. You'll use Bolt.new or Dyad to scaffold your project in Phase 2.
             </p>
           </div>
         </div>
