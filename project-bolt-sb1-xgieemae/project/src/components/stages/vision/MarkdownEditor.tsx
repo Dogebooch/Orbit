@@ -1,0 +1,194 @@
+import React, { useState, useEffect } from 'react';
+import { Button } from '../../ui';
+import { FileText, RefreshCw } from 'lucide-react';
+import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile } from '../../../utils/markdownUtils';
+
+interface VisionData {
+  problem: string;
+  target_user: string;
+  success_metrics: string;
+  why_software: string;
+  target_level: string;
+  ai_challenge_response: string;
+}
+
+interface UserProfileData {
+  primary_user: string;
+  goal: string;
+  context: string;
+  frustrations: string;
+  technical_comfort: string;
+  time_constraints: string;
+  persona_name: string;
+  persona_role: string;
+}
+
+interface MarkdownEditorProps {
+  vision: VisionData;
+  userProfile: UserProfileData;
+  onVisionChange: (vision: VisionData) => void;
+  onUserProfileChange: (profile: UserProfileData) => void;
+  lastSaved?: Date;
+}
+
+type ActiveDocument = 'vision' | 'profile' | 'metrics';
+
+export function MarkdownEditor({
+  vision,
+  userProfile,
+  onVisionChange,
+  onUserProfileChange,
+  lastSaved,
+}: MarkdownEditorProps) {
+  const [activeDoc, setActiveDoc] = useState<ActiveDocument>('vision');
+  const [visionMarkdown, setVisionMarkdown] = useState('');
+  const [profileMarkdown, setProfileMarkdown] = useState('');
+  const [metricsMarkdown, setMetricsMarkdown] = useState('');
+
+  useEffect(() => {
+    setVisionMarkdown(visionToMarkdown(vision));
+    setMetricsMarkdown(successMetricsToMarkdown(vision));
+  }, [vision]);
+
+  useEffect(() => {
+    setProfileMarkdown(userProfileToMarkdown(userProfile));
+  }, [userProfile]);
+
+  const handleVisionMarkdownChange = (value: string) => {
+    setVisionMarkdown(value);
+    const parsed = markdownToVision(value);
+    onVisionChange({ ...vision, ...parsed });
+  };
+
+  const handleProfileMarkdownChange = (value: string) => {
+    setProfileMarkdown(value);
+    const parsed = markdownToUserProfile(value);
+    onUserProfileChange({ ...userProfile, ...parsed });
+  };
+
+  const handleRegenerateFromStructure = () => {
+    if (activeDoc === 'vision') {
+      setVisionMarkdown(visionToMarkdown(vision));
+    } else if (activeDoc === 'profile') {
+      setProfileMarkdown(userProfileToMarkdown(userProfile));
+    } else {
+      setMetricsMarkdown(successMetricsToMarkdown(vision));
+    }
+  };
+
+  const handleDownload = () => {
+    let content: string;
+    let filename: string;
+
+    if (activeDoc === 'vision') {
+      content = visionMarkdown;
+      filename = '0_vision.md';
+    } else if (activeDoc === 'profile') {
+      content = profileMarkdown;
+      filename = '1_user_profile.md';
+    } else {
+      content = metricsMarkdown;
+      filename = '2_success_metrics.md';
+    }
+
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getCurrentMarkdown = () => {
+    if (activeDoc === 'vision') return visionMarkdown;
+    if (activeDoc === 'profile') return profileMarkdown;
+    return metricsMarkdown;
+  };
+
+  const handleMarkdownChange = (value: string) => {
+    if (activeDoc === 'vision') {
+      handleVisionMarkdownChange(value);
+    } else if (activeDoc === 'profile') {
+      handleProfileMarkdownChange(value);
+    } else {
+      setMetricsMarkdown(value);
+    }
+  };
+
+  const currentMarkdown = getCurrentMarkdown();
+  const isReadOnly = activeDoc === 'metrics';
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between -mx-6 px-6 py-3 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
+        <div className="flex gap-2">
+          <Button
+            variant={activeDoc === 'vision' ? 'primary' : 'ghost'}
+            onClick={() => setActiveDoc('vision')}
+          >
+            <FileText className="w-4 h-4 mr-2 text-amber-400" />
+            0_vision.md
+          </Button>
+          <Button
+            variant={activeDoc === 'profile' ? 'primary' : 'ghost'}
+            onClick={() => setActiveDoc('profile')}
+          >
+            <FileText className="w-4 h-4 mr-2 text-blue-400" />
+            1_user_profile.md
+          </Button>
+          <Button
+            variant={activeDoc === 'metrics' ? 'primary' : 'ghost'}
+            onClick={() => setActiveDoc('metrics')}
+          >
+            <FileText className="w-4 h-4 mr-2 text-green-400" />
+            2_success_metrics.md
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {lastSaved && (
+            <span className="text-sm text-primary-500">
+              Last saved: {lastSaved.toLocaleTimeString()}
+            </span>
+          )}
+          <Button variant="ghost" size="sm" onClick={handleRegenerateFromStructure} title="Regenerate from structured data">
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 380px)', minHeight: '500px' }}>
+        <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
+          <FileText className="w-4 h-4 text-primary-400" />
+          <span className="text-sm font-medium text-primary-300">
+            {isReadOnly ? 'Source (Read-only)' : 'Editor'}
+          </span>
+          <span className="text-xs text-primary-500 ml-auto">
+            {currentMarkdown.length} characters
+          </span>
+        </div>
+        <textarea
+          value={currentMarkdown}
+          onChange={(e) => handleMarkdownChange(e.target.value)}
+          readOnly={isReadOnly}
+          className={`flex-1 w-full p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 overflow-auto ${
+            isReadOnly ? 'opacity-70 cursor-not-allowed' : ''
+          }`}
+          spellCheck={false}
+        />
+        {isReadOnly && (
+          <p className="text-xs text-primary-500 mt-2 flex-shrink-0">
+            This file is auto-generated from your vision data. Edit the source fields in the Guided Setup to update.
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-start gap-2 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
+        <div className="text-blue-300 text-sm">
+          <strong>Tip:</strong> These files are designed for AI-assisted development. Place them in your project root for Claude Code and Copilot to reference during development.
+        </div>
+      </div>
+    </div>
+  );
+}

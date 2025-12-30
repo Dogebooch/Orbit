@@ -1,0 +1,292 @@
+# Orbit - Mission Control for AI Development
+
+## Project Overview
+A comprehensive "Mission Control" desktop application for developers using AI. This app bridges rapid prototyping (Bolt.new) and robust engineering (VS Code + AI assistants) by enforcing a strategy-first workflow where context drives code.
+
+**Philosophy: "Context is King"** - Most AI workflows fail because the model forgets the **Why** (Vision) and **Who** (User) while focusing on the **How** (Code). This app enforces a workflow where Strategy is the "Source of Truth" that drives the Code.
+
+## Target User
+Developers who use AI coding assistants (Copilot, Claude Code, ChatGPT) and want to maintain context consistency throughout their development lifecycle. They move between rapid prototyping (Bolt.new) and production code (VS Code).
+
+---
+
+## Technical Stack
+- **Frontend**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS (custom Slate/Zinc dark theme)
+- **Icons**: Lucide React
+- **Data**: Local-first using localStorage (Supabase-like API wrapper)
+- **State**: React Context API
+
+## Architecture
+
+### Local-First Design
+The app uses `localStorage` with a custom wrapper (`src/lib/localStorage.ts`) that mimics the Supabase API pattern. This enables:
+- Offline operation
+- No authentication required (mock user)
+- Data persists in browser storage
+
+**Key file**: `src/lib/supabase.ts` exports `localDb` as `supabase` for drop-in compatibility.
+
+### Component Organization
+```
+src/components/
+├── auth/          # AuthForm, AuthGuard (currently bypassed with mock user)
+├── layout/        # Sidebar, ProjectSelector
+├── stages/        # Main stage components (one per workflow stage)
+│   ├── vision/    # VisionStage subcomponents
+│   ├── research/  # ResearchStage subcomponents  
+│   ├── strategy/  # StrategyStage subcomponents
+│   ├── terminal/  # Terminal-related components
+│   └── workbench/ # WorkbenchStage subcomponents
+└── ui/            # Reusable UI primitives (Button, Card, Input, Textarea)
+```
+
+### Stage-Based Workflow
+1. **Vision** - Define project vision and user personas
+2. **Research** - Competitive research and app analysis
+3. **Workbench** - Build with AI assistants using context clipping
+4. **Prompt Library** - Manage prompt templates
+5. **Testing** - Validation and deployment preparation
+6. **Settings** - MCP server configuration
+
+---
+
+## Coding Standards
+
+### TypeScript
+- Use TypeScript for ALL new files
+- Enable strict mode (already configured in tsconfig.app.json)
+- Avoid `any` unless absolutely necessary - document why if used
+- Define interfaces for all props and data structures
+
+### React Patterns
+- Use functional components exclusively
+- Use React hooks (useState, useEffect, useContext, useMemo, useCallback)
+- Keep components focused and single-responsibility
+- Extract reusable logic into custom hooks when appropriate
+
+### Imports
+```typescript
+// React imports first
+import React, { useState, useEffect } from 'react';
+
+// Third-party imports
+import { SomeIcon } from 'lucide-react';
+
+// Local imports - contexts
+import { useApp } from '../../contexts/AppContext';
+
+// Local imports - components
+import { Button } from '../ui/Button';
+
+// Local imports - utilities
+import { supabase } from '../../lib/supabase';
+```
+
+---
+
+## Design System
+
+### Color Palette (Tailwind Classes)
+**Primary (Slate)** - Used for backgrounds, text, and primary actions:
+- `primary-950` - Darkest background (body)
+- `primary-900` - Card backgrounds, inputs
+- `primary-800` - Elevated surfaces
+- `primary-700` - Primary buttons, active states
+- `primary-600` - Button hover states
+- `primary-400` - Muted text, icons
+- `primary-300` - Labels
+- `primary-200` - Secondary text
+- `primary-100` - Primary text
+
+**Accent (Zinc)** - Used for borders and subtle highlights:
+- `accent-900` - Ghost button hover
+- `accent-800` - Card borders, secondary buttons
+- `accent-700` - Input borders, dividers
+
+### Custom CSS Classes (defined in index.css)
+```css
+.btn           - Base button styles
+.btn-primary   - Primary action button (bg-primary-700)
+.btn-secondary - Secondary action button (bg-accent-800)
+.btn-ghost     - Transparent button with hover state
+
+.input         - Text input styling
+.textarea      - Multiline input (extends .input)
+
+.card          - Container with border and shadow
+.card-hover    - Card with hover effects
+
+.label         - Form label styling
+.divider       - Horizontal separator
+```
+
+### Typography
+- **Font Family**: Space Grotesk (sans), JetBrains Mono (mono)
+- Use semantic heading hierarchy (h1 > h2 > h3)
+- Text sizes via Tailwind: `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`
+
+### Spacing
+- Follow 8px spacing system
+- Use Tailwind spacing: `p-2` (8px), `p-4` (16px), `p-6` (24px), `p-8` (32px)
+- Consistent gaps: `gap-2`, `gap-4`, `gap-6`
+
+### Shadows
+- `shadow-soft` - Subtle elevation (cards)
+- `shadow-soft-lg` - Higher elevation (modals, dropdowns)
+
+---
+
+## UI Component Guidelines
+
+### When Creating Components
+1. Place in appropriate directory based on function
+2. Use existing UI primitives from `src/components/ui/`
+3. Accept className prop for customization
+4. Include proper TypeScript interface for props
+
+### Button Usage
+```tsx
+// Primary action
+<button className="btn-primary">Save</button>
+
+// Secondary action
+<button className="btn-secondary">Cancel</button>
+
+// Subtle action
+<button className="btn-ghost">More Options</button>
+```
+
+### Card Usage
+```tsx
+<div className="card p-6">
+  <h3 className="text-lg font-semibold text-primary-100 mb-4">Title</h3>
+  <p className="text-primary-400">Content</p>
+</div>
+```
+
+### Form Fields
+```tsx
+<label className="label">Field Name</label>
+<input className="input" placeholder="Enter value..." />
+
+<label className="label">Description</label>
+<textarea className="textarea" rows={4} />
+```
+
+---
+
+## Data Operations
+
+### Using the Local Database
+```typescript
+import { supabase } from '../lib/supabase';
+
+// Query data
+const { data, error } = await supabase
+  .from('projects')
+  .select('*')
+  .eq('user_id', userId);
+
+// Insert data
+const { data, error } = await supabase
+  .from('tasks')
+  .insert({ title: 'New Task', project_id: projectId })
+  .select()
+  .single();
+
+// Update data
+const { data, error } = await supabase
+  .from('visions')
+  .update({ problem: 'Updated problem' })
+  .eq('id', visionId)
+  .select()
+  .single();
+
+// Delete data
+const { error } = await supabase
+  .from('tasks')
+  .delete()
+  .eq('id', taskId);
+```
+
+### Available Tables
+- `projects` - Project metadata and current stage
+- `visions` - Project vision and problem statements
+- `user_profiles` - Target user personas
+- `tasks` - Project tasks with status/priority
+- `prds` - Product requirements documents
+- `prompts` - Custom prompt templates
+- `settings` - User preferences
+- `terminal_preferences` - Terminal display settings
+- `favorite_commands` - Saved terminal commands
+- `research_apps` - Competitive research entries
+- `research_notes` - Notes per research app
+- `research_images` - Uploaded research images
+
+---
+
+## Problem Solving Approach
+
+1. **Start simple** - Implement the simplest solution that works first
+2. **Iterate** - Add complexity only when specifically requested
+3. **Highlight issues** - Point out potential edge cases or problems
+4. **Suggest tests** - Recommend testing approaches for new features
+5. **Ask questions** - Clarify ambiguous requirements before implementing
+
+## What NOT To Do
+
+- Don't use `any` type without documented justification
+- Don't bypass the localStorage wrapper for direct localStorage access
+- Don't create new color variables - use existing primary/accent palette
+- Don't add external dependencies without discussion
+- Don't break existing stage navigation or context flow
+- Don't implement authentication - the app uses a mock user intentionally
+
+---
+
+## Current Implementation Status
+
+**Completed:**
+- Local-first data persistence with Supabase-like API
+- Mock authentication (no login required)
+- Project management and switching
+- Vision & User Profile stage
+- Research stage with app analysis
+- Workbench with Context Clipper
+- Prompt Library stage
+- Testing & Deployment stage
+- Settings & MCP Integration hub
+- Responsive dark-themed UI
+- Auto-save functionality
+
+**Known Limitations:**
+- Terminal integration is placeholder only (needs Electron for real terminal)
+- File system operations use localStorage, not actual files
+- No real-time collaboration features
+- No export to local markdown files (clipboard copy only)
+
+---
+
+## Quick Reference
+
+### Run Development Server
+```bash
+npm run dev
+```
+
+### Type Checking
+```bash
+npm run typecheck
+```
+
+### Linting
+```bash
+npm run lint
+```
+
+### Build for Production
+```bash
+npm run build
+```
+

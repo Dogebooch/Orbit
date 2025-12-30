@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-accent-700;
+  }
+
+  body {
+    @apply bg-primary-950 text-primary-100 antialiased;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-950;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-700 hover:bg-primary-600 text-white focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-accent-800 hover:bg-accent-700 text-primary-100 focus:ring-accent-600;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent hover:bg-accent-900 text-primary-200 focus:ring-accent-700;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 bg-primary-900 border border-accent-700 rounded-lg text-primary-100 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all duration-200;
+  }
+
+  .textarea {
+    @apply input resize-none;
+  }
+
+  .card {
+    @apply bg-primary-900 border border-accent-800 rounded-lg shadow-soft;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:shadow-soft-lg hover:border-accent-700;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-primary-300 mb-2;
+  }
+
+  .divider {
+    @apply border-t border-accent-800 my-6;
+  }
+}
