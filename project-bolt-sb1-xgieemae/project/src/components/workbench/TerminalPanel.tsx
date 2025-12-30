@@ -7,6 +7,11 @@ import { TerminalToolbar } from '../terminal/TerminalToolbar';
 import { TerminalSettings } from '../terminal/TerminalSettings';
 import { FavoritesPanel } from '../terminal/FavoritesPanel';
 import { XTerminal, XTerminalRef } from '../terminal/XTerminal';
+import { GripVertical } from 'lucide-react';
+
+const DEFAULT_TERMINAL_HEIGHT = 400; // pixels
+const MIN_TERMINAL_HEIGHT = 200;
+const MAX_TERMINAL_HEIGHT = 800;
 
 export function TerminalPanel() {
   const {
@@ -35,12 +40,33 @@ export function TerminalPanel() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showPathConfig, setShowPathConfig] = useState(false);
   const [pathInput, setPathInput] = useState(workingDirectory);
+  const [hasCheckedPathConfig, setHasCheckedPathConfig] = useState(false);
   const xtermRef = useRef<(HTMLDivElement & XTerminalRef) | null>(null);
+  
+  // Terminal height state with localStorage persistence
+  const [terminalHeight, setTerminalHeight] = useState(() => {
+    const saved = localStorage.getItem('terminal-height');
+    return saved ? parseInt(saved, 10) : DEFAULT_TERMINAL_HEIGHT;
+  });
+  
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartY = useRef<number>(0);
+  const resizeStartHeight = useRef<number>(0);
 
   // Update path input when working directory changes
   useEffect(() => {
     setPathInput(workingDirectory);
   }, [workingDirectory]);
+
+  // Show path config on first visit if no working directory is set
+  useEffect(() => {
+    if (!hasCheckedPathConfig && !workingDirectory) {
+      setShowPathConfig(true);
+      setHasCheckedPathConfig(true);
+    } else if (workingDirectory) {
+      setHasCheckedPathConfig(true);
+    }
+  }, [workingDirectory, hasCheckedPathConfig]);
 
   // Set up terminal output callback
   useEffect(() => {
@@ -66,6 +92,45 @@ export function TerminalPanel() {
     if (pathInput.trim()) {
       setWorkingDirectory(pathInput.trim());
       setShowPathConfig(false);
+    }
+  };
+
+  const handleInitGit = async () => {
+    if (!workingDirectory) {
+      alert('Please set a working directory first');
+      return;
+    }
+
+    if (isBackendConnected) {
+      // Send git init command through terminal
+      sendInput('git init\r');
+    } else {
+      // Fallback: execute command
+      await executeCommand('git init');
+    }
+  };
+
+  const handleOpenDirectory = async () => {
+    if (!workingDirectory) {
+      alert('Please set a working directory first');
+      return;
+    }
+
+    // Check if we're in Electron
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const result = await (window as any).electronAPI.openDirectory(workingDirectory);
+        if (!result.success) {
+          console.error('Failed to open directory:', result.error);
+          alert(`Failed to open directory: ${result.error}`);
+        }
+      } catch (error) {
+        console.error('Error opening directory:', error);
+        alert('Failed to open directory');
+      }
+    } else {
+      // Fallback for web: show path in alert
+      alert(`Working directory: ${workingDirectory}`);
     }
   };
 
@@ -116,8 +181,62 @@ export function TerminalPanel() {
     }
   }, [pendingCommand, isBackendConnected]);
 
+  // Save terminal height to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('terminal-height', terminalHeight.toString());
+  }, [terminalHeight]);
+
+  // Handle resize drag start
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartY.current = e.clientY;
+    resizeStartHeight.current = terminalHeight;
+  }, [terminalHeight]);
+
+  // Handle resize drag
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - resizeStartY.current;
+      const newHeight = Math.max(
+        MIN_TERMINAL_HEIGHT,
+        Math.min(MAX_TERMINAL_HEIGHT, resizeStartHeight.current - deltaY)
+      );
+      setTerminalHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
+  // Trigger terminal resize when height changes (for xterm)
+  useEffect(() => {
+    if (isBackendConnected && xtermRef.current?.terminalFit) {
+      // Small delay to ensure DOM has updated
+      const timeoutId = setTimeout(() => {
+        xtermRef.current?.terminalFit();
+      }, 10);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [terminalHeight, isBackendConnected]);
+
   return (
-    <div className="h-full flex gap-4">
+    <div className="flex gap-4" style={{ height: `${terminalHeight}px`, minHeight: `${MIN_TERMINAL_HEIGHT}px` }}>
       {showFavorites && (
         <FavoritesPanel
           favorites={favoriteCommands}
@@ -128,7 +247,18 @@ export function TerminalPanel() {
         />
       )}
 
-      <div className="flex-1 flex flex-col bg-gray-950 rounded-lg border border-gray-800 shadow-2xl overflow-hidden">
+      <div className="flex-1 flex flex-col bg-gray-950 rounded-lg border border-gray-800 shadow-2xl overflow-hidden relative">
+        {/* Resize Handle - Top edge */}
+        <div
+          className="absolute top-0 left-0 right-0 h-1.5 cursor-row-resize hover:h-2 transition-all group z-50"
+          onMouseDown={handleResizeStart}
+          style={{ cursor: isResizing ? 'row-resize' : 'row-resize' }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-0.5 bg-gray-700 group-hover:bg-gray-600 rounded-full transition-colors" />
+          </div>
+          <GripVertical className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
         <div className="relative">
           <TerminalToolbar
             onClear={handleClear}
@@ -140,6 +270,9 @@ export function TerminalPanel() {
             showFavorites={showFavorites}
             onTogglePathConfig={() => setShowPathConfig(!showPathConfig)}
             showPathConfig={showPathConfig}
+            onInitGit={handleInitGit}
+            onOpenDirectory={handleOpenDirectory}
+            workingDirectory={workingDirectory}
           />
 
           {showSettings && (

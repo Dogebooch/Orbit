@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   openLocalFile: (relativePath) => ipcRenderer.invoke('open-local-file', relativePath),
+  openDirectory: (directoryPath) => ipcRenderer.invoke('open-directory', directoryPath),
   platform: process.platform,
   isElectron: true,
 });

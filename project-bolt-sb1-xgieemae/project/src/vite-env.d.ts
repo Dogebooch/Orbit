@@ -9,3 +9,13 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  electronAPI?: {
+    getAppVersion: () => Promise<string>;
+    openLocalFile: (relativePath: string) => Promise<{ success: boolean; error?: string }>;
+    openDirectory: (directoryPath: string) => Promise<{ success: boolean; error?: string }>;
+    platform: string;
+    isElectron: boolean;
+  };
+}

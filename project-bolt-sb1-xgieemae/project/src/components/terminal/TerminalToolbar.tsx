@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Copy, Download, Settings, Star, FolderOpen } from 'lucide-react';
+import { Trash2, Copy, Download, Settings, Star, FolderOpen, GitBranch, Folder } from 'lucide-react';
 
 interface TerminalToolbarProps {
   onClear: () => void;
@@ -11,6 +11,9 @@ interface TerminalToolbarProps {
   showFavorites: boolean;
   onTogglePathConfig?: () => void;
   showPathConfig?: boolean;
+  onInitGit?: () => void;
+  onOpenDirectory?: () => void;
+  workingDirectory?: string;
 }
 
 export function TerminalToolbar({
@@ -23,6 +26,9 @@ export function TerminalToolbar({
   showFavorites,
   onTogglePathConfig,
   showPathConfig,
+  onInitGit,
+  onOpenDirectory,
+  workingDirectory,
 }: TerminalToolbarProps) {
   return (
     <div className="border-b border-gray-700 bg-gray-900 px-4 py-2">
@@ -43,6 +49,26 @@ export function TerminalToolbar({
               title="Set project path"
             >
               <FolderOpen className="w-4 h-4" />
+            </button>
+          )}
+
+          {onOpenDirectory && workingDirectory && (
+            <button
+              onClick={onOpenDirectory}
+              className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
+              title="Open in file explorer"
+            >
+              <Folder className="w-4 h-4" />
+            </button>
+          )}
+
+          {onInitGit && workingDirectory && (
+            <button
+              onClick={onInitGit}
+              className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
+              title="Initialize Git repository"
+            >
+              <GitBranch className="w-4 h-4" />
             </button>
           )}
 

@@ -102,3 +102,18 @@ ipcMain.handle('open-local-file', async (event, relativePath) => {
   }
 });
 
+// Handle opening directory in file explorer
+ipcMain.handle('open-directory', async (event, directoryPath) => {
+  try {
+    if (!directoryPath || !fs.existsSync(directoryPath)) {
+      return { success: false, error: `Directory not found: ${directoryPath}` };
+    }
+    
+    // Use shell.openPath for Windows (opens in Explorer)
+    await shell.openPath(directoryPath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+

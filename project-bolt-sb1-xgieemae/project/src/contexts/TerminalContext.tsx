@@ -376,12 +376,32 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Set working directory
-  const setWorkingDirectory = useCallback((path: string) => {
+  const setWorkingDirectory = useCallback(async (path: string) => {
     setWorkingDirectoryState(path);
     if (wsClientRef.current?.isConnected()) {
       wsClientRef.current.send({ type: 'config:setWorkingDir', path });
     }
-  }, []);
+    
+    // Persist to database if we have a session
+    if (currentSession && currentProject) {
+      try {
+        await supabase
+          .from('terminal_sessions')
+          .update({ working_directory: path })
+          .eq('id', currentSession.id);
+      } catch (error) {
+        console.error('[Terminal] Failed to persist working directory:', error);
+      }
+    }
+    
+    // After persisting, if backend is connected, automatically run claude
+    if (isBackendConnected) {
+      // Wait 500ms to ensure cd command completes
+      setTimeout(() => {
+        sendInput('claude\r');
+      }, 500);
+    }
+  }, [currentSession, currentProject, isBackendConnected, sendInput]);
 
   // Set terminal output callback
   const setOnTerminalOutput = useCallback((callback: (data: string) => void) => {
