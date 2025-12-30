@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
+import { useDevelopmentLoop } from '../../hooks/useDevelopmentLoop';
+import { getCommandForStep } from '../../utils/developmentLoopUtils';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Input } from '../ui';
 import { Toast } from '../ui/Toast';
@@ -14,6 +16,8 @@ import {
   AlertCircle,
   ArrowRight,
   Flag,
+  FileText,
+  Sparkles,
 } from 'lucide-react';
 
 interface Task {
@@ -31,7 +35,8 @@ interface Task {
 
 export function TaskBoard() {
   const { currentProject } = useApp();
-  const { taskMasterTasks } = useTerminal();
+  const { taskMasterTasks, setCommandInput } = useTerminal();
+  const { currentStep, activeTaskId } = useDevelopmentLoop();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -181,6 +186,38 @@ export function TaskBoard() {
                     </p>
                   </div>
                 )}
+
+                {/* Development Loop Quick Actions */}
+                {currentStep === 'select_task' || currentStep === 'generate_brief' ? (
+                  <div className="pt-4 border-t border-primary-600/50">
+                    <p className="text-xs text-primary-400 mb-3">
+                      Development Loop: {currentStep === 'select_task' ? 'Ready to generate brief' : 'Brief ready'}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          const command = getCommandForStep('generate_brief', currentTask.id);
+                          setCommandInput(command);
+                        }}
+                        variant="primary"
+                        className="flex-1"
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Generate Brief
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setCommandInput('/review');
+                        }}
+                        variant="secondary"
+                        className="flex-1"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Review Code
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="flex gap-3 pt-4">
                   <Button

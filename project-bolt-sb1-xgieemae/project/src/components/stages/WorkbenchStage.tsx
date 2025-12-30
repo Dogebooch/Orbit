@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Code2, BookMarked, ExternalLink, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { TerminalPanel } from '../workbench/TerminalPanel';
+import { TaskBoard } from '../workbench/TaskBoard';
+import { DevelopmentLoopHelper } from '../workbench/DevelopmentLoopHelper';
 import { Card, Button, Tooltip } from '../ui';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
+import { useDevelopmentLoop } from '../../hooks/useDevelopmentLoop';
 import { supabase } from '../../lib/supabase';
 import { fetchProjectData, generateClaudeMd } from '../../lib/claudeExport';
 import { 
@@ -17,6 +20,12 @@ import {
 export function WorkbenchStage() {
   const { setCurrentStage, currentProject, user } = useApp();
   const { setCommandInput } = useTerminal();
+  const {
+    currentStep,
+    completedSteps,
+    activeTaskId,
+    loopIteration,
+  } = useDevelopmentLoop();
   const [copied, setCopied] = useState(false);
   const [isTaskMasterExpanded, setIsTaskMasterExpanded] = useState(true);
   const [taskMasterPrompts, setTaskMasterPrompts] = useState<TaskMasterPrompt[]>([]);
@@ -74,58 +83,93 @@ export function WorkbenchStage() {
 
   const groupedPrompts = groupPromptsByType(taskMasterPrompts);
 
+  const handleStepAction = useCallback((step: string, command: string) => {
+    // Replace [Task ID] with actual task ID if available
+    let finalCommand = command;
+    if (command.includes('[Task ID]') && activeTaskId) {
+      finalCommand = command.replace('[Task ID]', activeTaskId);
+    }
+    setCommandInput(finalCommand);
+  }, [activeTaskId, setCommandInput]);
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="mb-4">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold text-primary-100 flex items-center gap-2">
           <Code2 className="w-6 h-6 text-primary-400" />
           Mission Control
         </h1>
         <p className="text-primary-400 mt-1 text-sm">
           Integrated terminal for AI-assisted development
+          {loopIteration > 0 && (
+            <span className="ml-2 text-primary-500">
+              • Loop #{loopIteration}
+            </span>
+          )}
         </p>
       </div>
 
-      {/* Terminal */}
-      <div className="flex-shrink-0 mb-3">
-        <TerminalPanel />
+      {/* Development Loop Helper */}
+      <div className="mb-4 flex-shrink-0">
+        <DevelopmentLoopHelper
+          currentStep={currentStep || undefined}
+          completedSteps={completedSteps}
+          onStepAction={handleStepAction}
+          activeTaskId={activeTaskId}
+        />
       </div>
 
-      {/* Context Clipper and TaskMaster Commands side by side */}
-      <div className="mb-3 flex gap-3 items-start">
-        {/* Context Clipper - positioned at left */}
-        <Card className="flex-shrink-0 p-4" style={{ width: 'fit-content' }}>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-primary-100">Context Clipper</h2>
-            <p className="text-xs text-primary-400">
-              Copy project context for AI assistants
-            </p>
+      {/* Main Content Area: TaskBoard and Terminal side by side */}
+      <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
+        {/* Left Column: TaskBoard */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <div className="flex-1 overflow-y-auto">
+            <TaskBoard />
           </div>
-          <div className="mt-3">
-            <Button
-              onClick={handleCopyContext}
-              variant="primary"
-              size="sm"
-              disabled={!currentProject}
-              className="text-xs w-full"
-            >
-              {copied ? (
-                <>
-                  <Check className="mr-1.5 w-3.5 h-3.5" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="mr-1.5 w-3.5 h-3.5" />
-                  Copy Project Context
-                </>
-              )}
-            </Button>
-          </div>
-        </Card>
+        </div>
 
-        {/* TaskMaster Prompts Quick Access - takes remaining space */}
-        <Card className="flex-1 min-w-0 p-4">
+        {/* Right Column: Terminal and Context Tools */}
+        <div className="flex-1 flex flex-col gap-3 overflow-hidden min-w-0">
+          {/* Terminal */}
+          <div className="flex-shrink-0">
+            <TerminalPanel />
+          </div>
+
+          {/* Context Clipper and TaskMaster Commands */}
+          <div className="flex gap-3 items-start flex-shrink-0">
+            {/* Context Clipper */}
+            <Card className="flex-shrink-0 p-4" style={{ width: 'fit-content' }}>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-primary-100">Context Clipper</h2>
+                <p className="text-xs text-primary-400">
+                  Copy project context for AI assistants
+                </p>
+              </div>
+              <div className="mt-3">
+                <Button
+                  onClick={handleCopyContext}
+                  variant="primary"
+                  size="sm"
+                  disabled={!currentProject}
+                  className="text-xs w-full"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="mr-1.5 w-3.5 h-3.5" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-1.5 w-3.5 h-3.5" />
+                      Copy Project Context
+                    </>
+                  )}
+                </Button>
+              </div>
+            </Card>
+
+            {/* TaskMaster Prompts Quick Access */}
+            <Card className="flex-1 min-w-0 p-4">
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
@@ -196,6 +240,8 @@ export function WorkbenchStage() {
           </div>
         )}
         </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
