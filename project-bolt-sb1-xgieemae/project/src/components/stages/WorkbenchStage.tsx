@@ -38,13 +38,43 @@ export function WorkbenchStage() {
         </p>
       </div>
 
-      {/* TaskMaster Prompts Quick Access */}
-      <Card className="mb-3">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
+      {/* Terminal */}
+      <div className="flex-shrink-0 mb-3">
+        <TerminalPanel />
+      </div>
+
+      {/* Context Clipper and TaskMaster Commands side by side */}
+      <div className="mb-3 flex gap-3 items-start">
+        {/* Context Clipper - positioned at left */}
+        <div className="flex-shrink-0">
+          <Button
+            onClick={handleCopyContext}
+            variant="primary"
+            size="sm"
+            disabled={!currentProject}
+            className="text-xs"
+          >
+            {copied ? (
+              <>
+                <Check className="mr-1.5 w-3.5 h-3.5" />
+                Context Clipper: Copied!
+              </>
+            ) : (
+              <>
+                <Copy className="mr-1.5 w-3.5 h-3.5" />
+                Context Clipper: Copy Project Context for the AI
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* TaskMaster Prompts Quick Access - takes remaining space */}
+        <Card className="flex-1 min-w-0">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
               onClick={() => setIsTaskMasterExpanded(!isTaskMasterExpanded)}
-              className="p-1 hover:bg-primary-800/50 rounded transition-colors"
+              className="p-1 hover:bg-primary-800/50 rounded transition-colors flex-shrink-0"
             >
               {isTaskMasterExpanded ? (
                 <ChevronUp className="w-4 h-4 text-primary-400" />
@@ -52,9 +82,9 @@ export function WorkbenchStage() {
                 <ChevronDown className="w-4 h-4 text-primary-400" />
               )}
             </button>
-            <div>
-              <h2 className="text-base font-semibold text-primary-100">TaskMaster Commands</h2>
-              <p className="text-xs text-primary-400">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-primary-100 truncate">TaskMaster Commands</h2>
+              <p className="text-xs text-primary-400 truncate">
                 Quick access to TaskMaster prompts
               </p>
             </div>
@@ -66,6 +96,7 @@ export function WorkbenchStage() {
             }}
             variant="secondary"
             size="sm"
+            className="flex-shrink-0"
           >
             <BookMarked className="mr-2 w-4 h-4" />
             View All
@@ -73,9 +104,9 @@ export function WorkbenchStage() {
         </div>
         {isTaskMasterExpanded && (
           <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50">
-              <h3 className="text-sm font-medium text-primary-200 mb-1">Get Started</h3>
-              <p className="text-xs text-primary-400 mb-2">
+            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
+              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Get Started</h3>
+              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
                 Parse PRD and create initial tasks
               </p>
               <Button
@@ -86,14 +117,14 @@ export function WorkbenchStage() {
                 }}
                 variant="ghost"
                 size="sm"
-                className="w-full text-xs"
+                className="w-full text-xs whitespace-nowrap"
               >
                 View Prompt
               </Button>
             </div>
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50">
-              <h3 className="text-sm font-medium text-primary-200 mb-1">Task Management</h3>
-              <p className="text-xs text-primary-400 mb-2">
+            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
+              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Task Management</h3>
+              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
                 Show tasks, get next task, analyze complexity
               </p>
               <Button
@@ -103,14 +134,14 @@ export function WorkbenchStage() {
                 }}
                 variant="ghost"
                 size="sm"
-                className="w-full text-xs"
+                className="w-full text-xs whitespace-nowrap"
               >
                 View Prompts
               </Button>
             </div>
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50">
-              <h3 className="text-sm font-medium text-primary-200 mb-1">Implementation</h3>
-              <p className="text-xs text-primary-400 mb-2">
+            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
+              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Implementation</h3>
+              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
                 Implement tasks, break down complex tasks
               </p>
               <Button
@@ -120,44 +151,14 @@ export function WorkbenchStage() {
                 }}
                 variant="ghost"
                 size="sm"
-                className="w-full text-xs"
+                className="w-full text-xs whitespace-nowrap"
               >
                 View Prompts
               </Button>
             </div>
           </div>
         )}
-      </Card>
-
-      {/* Context Clipper */}
-      <div className="mb-3 flex items-center justify-between px-3 py-2 rounded-lg bg-primary-900/30 border border-primary-800/30">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-primary-300">Context Clipper</span>
-          <span className="text-xs text-primary-500">Copy project context for AI</span>
-        </div>
-        <Button
-          onClick={handleCopyContext}
-          variant="primary"
-          size="sm"
-          disabled={!currentProject}
-          className="h-7 px-3 text-xs"
-        >
-          {copied ? (
-            <>
-              <Check className="mr-1.5 w-3.5 h-3.5" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Copy className="mr-1.5 w-3.5 h-3.5" />
-              Copy
-            </>
-          )}
-        </Button>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <TerminalPanel />
+        </Card>
       </div>
     </div>
   );
