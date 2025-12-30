@@ -508,3 +508,42 @@ export function hashFoundationData(vision: unknown, profile: unknown): string {
   return hash.toString(16);
 }
 
+/**
+ * Create default generator context with React + TypeScript + Vite stack
+ */
+export function createDefaultGeneratorContext(
+  projectName: string,
+  projectDescription: string,
+  vision?: {
+    problem: string;
+    target_user: string;
+    success_metrics: string;
+  },
+  userProfile?: {
+    primary_user: string;
+    goal: string;
+    technical_comfort: string;
+  }
+): GeneratorContext {
+  const defaultTechStack = TECH_STACK_TEMPLATES[0]; // React + TypeScript + Vite
+  
+  return {
+    projectName,
+    projectDescription,
+    targetUser: vision?.target_user || userProfile?.primary_user || '',
+    techStack: defaultTechStack,
+    codingStandards: defaultTechStack.defaultCodingStandards,
+    aiInstructions: DEFAULT_AI_INSTRUCTIONS,
+    vision: vision ? {
+      problem: vision.problem || '',
+      targetUser: vision.target_user || '',
+      successMetrics: vision.success_metrics || '',
+    } : undefined,
+    userProfile: userProfile ? {
+      primaryUser: userProfile.primary_user || '',
+      goal: userProfile.goal || '',
+      technicalComfort: userProfile.technical_comfort || 'medium',
+    } : undefined,
+  };
+}
+

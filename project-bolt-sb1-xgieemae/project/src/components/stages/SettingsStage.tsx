@@ -23,7 +23,6 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
-import { ProjectFilesWizard } from './settings/ProjectFilesWizard';
 import {
   getGeminiSettings,
   saveGeminiSettings,
@@ -43,7 +42,6 @@ export function SettingsStage() {
   const { isBackendConnected, wsClient, workingDirectory } = useTerminal();
   
   const [copiedServer, setCopiedServer] = useState<string | null>(null);
-  const [showProjectFilesWizard, setShowProjectFilesWizard] = useState(false);
   const [showMcpServers, setShowMcpServers] = useState(false);
   
   // AI Settings state
@@ -347,56 +345,6 @@ export function SettingsStage() {
           Configure AI integrations, generate project files, and set up MCP servers.
         </p>
       </div>
-
-      {/* Project Files Section */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <FileCode className="w-6 h-6 text-primary-400" />
-            <div>
-              <h2 className="text-xl font-semibold text-primary-100">Project Files Generator</h2>
-              <p className="text-sm text-primary-400">
-                Generate CLAUDE.md, .cursorrules, and copilot-instructions.md
-              </p>
-            </div>
-          </div>
-          <Button onClick={() => setShowProjectFilesWizard(!showProjectFilesWizard)}>
-            <FileCode className="w-4 h-4 mr-2" />
-            {showProjectFilesWizard ? 'Close Wizard' : 'Open Wizard'}
-          </Button>
-        </div>
-
-        {!showProjectFilesWizard && (
-          <div className="p-4 bg-primary-800/50 rounded-lg border border-primary-700">
-            <p className="text-sm text-primary-300 mb-3">
-              These files help AI assistants understand your project's coding standards, architecture, and guidelines.
-            </p>
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div className="p-3 bg-primary-900 rounded">
-                <span className="font-medium text-primary-200">CLAUDE.md</span>
-                <p className="text-xs text-primary-500 mt-1">Claude Code & Desktop</p>
-              </div>
-              <div className="p-3 bg-primary-900 rounded">
-                <span className="font-medium text-primary-200">.cursorrules</span>
-                <p className="text-xs text-primary-500 mt-1">Cursor IDE</p>
-              </div>
-              <div className="p-3 bg-primary-900 rounded">
-                <span className="font-medium text-primary-200">copilot-instructions.md</span>
-                <p className="text-xs text-primary-500 mt-1">GitHub Copilot</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showProjectFilesWizard && (
-          <div className="mt-6 pt-6 border-t border-primary-700">
-            <ProjectFilesWizard
-              geminiApiKey={isGeminiConfigured(geminiApiKey) ? geminiApiKey : undefined}
-              onClose={() => setShowProjectFilesWizard(false)}
-            />
-          </div>
-        )}
-      </Card>
 
       {/* AI Integration Section */}
       <Card>
