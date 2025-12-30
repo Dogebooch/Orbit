@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import {
   ChevronDown,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   ListChecks,
   PlayCircle,
   TestTube,
+  ExternalLink,
 } from 'lucide-react';
 import { parseGuideStructure } from '../../utils/guideParser';
 
@@ -26,6 +28,7 @@ export function SetupGuideStage() {
     phase5: false,
     phase6: false,
     phase7: false,
+    phase8: false,
   });
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
@@ -35,6 +38,23 @@ export function SetupGuideStage() {
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   const guideSections = parseGuideStructure();
+
+  // Helper function to extract text from React children recursively
+  const extractTextFromChildren = (children: React.ReactNode): string => {
+    if (typeof children === 'string') {
+      return children;
+    }
+    if (typeof children === 'number') {
+      return String(children);
+    }
+    if (Array.isArray(children)) {
+      return children.map(extractTextFromChildren).join('');
+    }
+    if (children && typeof children === 'object' && 'props' in children) {
+      return extractTextFromChildren((children as { props?: { children?: React.ReactNode } }).props?.children);
+    }
+    return '';
+  };
 
   // Load markdown content
   useEffect(() => {
@@ -159,19 +179,34 @@ export function SetupGuideStage() {
     };
   }, [guideSections]);
 
-  // Process markdown to add IDs to headings that match anchor tags and improve formatting
-  const processedMarkdown = guideContent
-    ? guideContent
-        // Handle HTML anchor tags before headings
-        .replace(
-          /<a id="([^"]+)"><\/a>(#+)\s*(.+)/g,
-          (_match, anchorId: string, hashes: string, title: string) => {
-            return `${hashes} <span id="${anchorId}">${title}</span>`;
-          }
-        )
-        // Handle anchor tags on their own line (standalone)
-        .replace(/<a id="([^"]+)"><\/a>\n/g, '')
-    : '';
+  // Extract anchor ID mappings and process markdown
+  // Creates a mapping of heading text to anchor IDs for custom heading components
+  const anchorIdMap = useRef<Map<string, string>>(new Map());
+  
+  // Process markdown to extract anchor IDs and apply them to headings
+  // Converts: <a id="overview"></a>\n## Overview  ->  ## Overview (with ID stored in map)
+  const processedMarkdown = useMemo(() => {
+    if (!guideContent) return '';
+    
+    const map = new Map<string, string>();
+    const processed = guideContent
+      // Handle HTML anchor tags on their own line followed by a heading
+      // Matches: <a id="id"></a>\n## Heading or <a id="id"></a>\n# Heading
+      .replace(
+        /<a id="([^"]+)"><\/a>\n(#+)\s+(.+)/g,
+        (_match, anchorId: string, hashes: string, title: string) => {
+          // Store mapping of heading text to anchor ID
+          map.set(title.trim(), anchorId);
+          // Return heading without anchor tag
+          return `${hashes} ${title}`;
+        }
+      )
+      // Remove any remaining standalone anchor tags
+      .replace(/<a id="[^"]+"><\/a>\n?/g, '');
+    
+    anchorIdMap.current = map;
+    return processed;
+  }, [guideContent]);
 
   return (
     <div className="flex overflow-hidden h-full">
@@ -240,12 +275,20 @@ export function SetupGuideStage() {
                             className="mt-0.5 w-4 h-4 rounded border-primary-600 bg-primary-800 text-primary-400 focus:ring-primary-500 focus:ring-2 flex-shrink-0"
                           />
                           <div className="flex-1 min-w-0">
-                            <div
-                              className={`text-xs font-medium ${
-                                isChecked ? 'line-through text-primary-400' : 'text-primary-200'
-                              }`}
-                            >
-                              {item.label}
+                            <div className="flex items-center gap-1.5">
+                              <div
+                                className={`text-xs font-medium ${
+                                  isChecked ? 'line-through text-primary-400' : 'text-primary-200'
+                                }`}
+                              >
+                                {item.label}
+                              </div>
+                              {item.isExternal && (
+                                <ExternalLink 
+                                  className="w-3 h-3 text-primary-500 flex-shrink-0" 
+                                  title="External tool - requires action outside this app"
+                                />
+                              )}
                             </div>
                             {item.description && (
                               <div className="mt-0.5 text-xs text-primary-500">{item.description}</div>
@@ -276,7 +319,7 @@ export function SetupGuideStage() {
       {/* Main Content Area */}
       <div
         ref={contentRef}
-        className="flex-1 overflow-y-auto bg-[#fafafa] text-gray-900"
+        className="overflow-y-auto flex-1 bg-primary-950 text-primary-100"
         style={{
           scrollBehavior: 'smooth',
         }}
@@ -284,7 +327,7 @@ export function SetupGuideStage() {
         <div className="px-8 py-12 mx-auto max-w-4xl">
           {loading ? (
             <div className="flex justify-center items-center h-64">
-              <div className="text-gray-500">Loading guide...</div>
+              <div className="text-primary-400">Loading guide...</div>
             </div>
           ) : (
             <div
@@ -296,60 +339,88 @@ export function SetupGuideStage() {
             >
               <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
               components={{
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                h1: ({ ...props }) => (
-                  <h1
-                    className="pb-3 mt-12 mb-6 text-4xl font-bold text-gray-900 border-b border-gray-200"
-                    {...props}
-                  />
-                ),
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                h2: ({ ...props }) => (
-                  <h2
-                    className="pb-2 mt-10 mb-4 text-3xl font-bold text-gray-900 border-b border-gray-200"
-                    {...props}
-                  />
-                ),
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                h3: ({ ...props }) => (
-                  <h3 className="mt-8 mb-3 text-2xl font-semibold text-gray-900" {...props} />
-                ),
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                h4: ({ ...props }) => (
-                  <h4 className="mt-6 mb-2 text-xl font-semibold text-gray-900" {...props} />
-                ),
+                h1: ({ children, ...props }) => {
+                  const headingText = extractTextFromChildren(children);
+                  const anchorId = anchorIdMap.current.get(headingText.trim());
+                  return (
+                    <h1
+                      id={anchorId}
+                      className="pb-3 mt-12 mb-6 text-4xl font-bold border-b text-primary-50 border-primary-700"
+                      {...props}
+                    >
+                      {children}
+                    </h1>
+                  );
+                },
+                h2: ({ children, ...props }) => {
+                  const headingText = extractTextFromChildren(children);
+                  const anchorId = anchorIdMap.current.get(headingText.trim());
+                  return (
+                    <h2
+                      id={anchorId}
+                      className="pb-2 mt-10 mb-4 text-3xl font-bold border-b text-primary-50 border-primary-700"
+                      {...props}
+                    >
+                      {children}
+                    </h2>
+                  );
+                },
+                h3: ({ children, ...props }) => {
+                  const headingText = extractTextFromChildren(children);
+                  const anchorId = anchorIdMap.current.get(headingText.trim());
+                  return (
+                    <h3 
+                      id={anchorId}
+                      className="mt-8 mb-3 text-2xl font-semibold text-primary-100" 
+                      {...props}
+                    >
+                      {children}
+                    </h3>
+                  );
+                },
+                h4: ({ children, ...props }) => {
+                  const headingText = extractTextFromChildren(children);
+                  const anchorId = anchorIdMap.current.get(headingText.trim());
+                  return (
+                    <h4 
+                      id={anchorId}
+                      className="mt-6 mb-2 text-xl font-semibold text-primary-100" 
+                      {...props}
+                    >
+                      {children}
+                    </h4>
+                  );
+                },
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 p: ({ ...props }) => (
-                  <p className="mb-4 leading-relaxed text-gray-800" {...props} />
+                  <p className="mb-4 leading-relaxed text-primary-200" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 ul: ({ ...props }) => (
-                  <ul className="mb-4 ml-6 space-y-2.5 list-disc text-gray-800 marker:text-gray-500" {...props} />
+                  <ul className="mb-4 ml-6 space-y-2.5 list-disc text-primary-200 marker:text-primary-400" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 ol: ({ ...props }) => (
-                  <ol className="mb-4 ml-6 space-y-2.5 list-decimal text-gray-800 marker:text-gray-500" {...props} />
+                  <ol className="mb-4 ml-6 space-y-2.5 list-decimal text-primary-200 marker:text-primary-400" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 li: ({ ...props }) => (
-                  <li className="leading-relaxed pl-1" {...props} />
+                  <li className="pl-1 leading-relaxed" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 code: ({ inline, className, children, ...props }: { inline?: boolean; className?: string; children?: React.ReactNode; [key: string]: unknown }) => {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const language = match ? match[1] : '';
-                  
                   return inline ? (
                     <code
-                      className="px-1.5 py-0.5 bg-gray-100 rounded text-sm font-mono text-gray-900 border border-gray-200"
+                      className="px-1.5 py-0.5 bg-primary-800 rounded text-sm font-mono text-primary-100 border border-primary-700"
                       {...props}
                     >
                       {children}
                     </code>
                   ) : (
                     <code
-                      className={`block overflow-x-auto p-4 mb-4 font-mono text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-200 ${className || ''}`}
+                      className={`block overflow-x-auto p-4 mb-4 font-mono text-sm text-primary-100 bg-primary-800 rounded-lg border border-primary-700 ${className || ''}`}
                       {...props}
                     >
                       {children}
@@ -358,47 +429,47 @@ export function SetupGuideStage() {
                 },
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 pre: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) => (
-                  <pre className="overflow-x-auto mb-4 bg-gray-50 rounded-lg border border-gray-200 p-0" {...props}>
+                  <pre className="overflow-x-auto p-0 mb-4 rounded-lg border bg-primary-800 border-primary-700" {...props}>
                     {children}
                   </pre>
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 blockquote: ({ ...props }) => (
                   <blockquote
-                    className="pl-4 py-2 my-6 italic text-gray-700 border-l-4 border-blue-400 bg-blue-50 rounded-r"
+                    className="py-2 pl-4 my-6 italic text-primary-200 bg-primary-800/50 rounded-r border-l-4 border-blue-400"
                     {...props}
                   />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 table: ({ ...props }) => (
-                  <div className="overflow-x-auto mb-6 my-6 shadow-sm rounded-lg border border-gray-200">
-                    <table className="min-w-full border-collapse bg-white" {...props} />
+                  <div className="overflow-x-auto my-6 mb-6 rounded-lg border border-primary-700 shadow-sm">
+                    <table className="min-w-full bg-primary-900 border-collapse" {...props} />
                   </div>
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 th: ({ ...props }) => (
                   <th
-                    className="px-4 py-3 font-semibold text-left bg-gray-50 border-b-2 border-gray-200 text-gray-900"
+                    className="px-4 py-3 font-semibold text-left text-primary-100 bg-primary-800 border-b-2 border-primary-700"
                     {...props}
                   />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 td: ({ ...props }) => (
-                  <td className="px-4 py-3 border-b border-gray-100 text-gray-800" {...props} />
+                  <td className="px-4 py-3 text-primary-200 border-b border-primary-800" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 strong: ({ ...props }) => (
-                  <strong className="font-semibold text-gray-900 font-bold" {...props} />
+                  <strong className="font-bold text-primary-100" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 em: ({ ...props }) => (
-                  <em className="italic text-gray-800" {...props} />
+                  <em className="italic text-primary-200" {...props} />
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 a: ({ href, children, ...props }: { href?: string; children?: React.ReactNode; [key: string]: unknown }) => (
                   <a
                     href={href}
-                    className="text-blue-600 underline hover:text-blue-800 transition-colors font-medium"
+                    className="font-medium text-blue-400 underline transition-colors hover:text-blue-300"
                     target={href?.startsWith('http') ? '_blank' : undefined}
                     rel={href?.startsWith('http') ? 'noopener noreferrer' : undefined}
                     {...props}
@@ -408,7 +479,7 @@ export function SetupGuideStage() {
                 ),
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 hr: ({ ...props }) => (
-                  <hr className="my-8 border-gray-300" {...props} />
+                  <hr className="my-8 border-primary-700" {...props} />
                 ),
               }}
             >

@@ -43,6 +43,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     phase5: false,
     phase6: false,
     phase7: false,
+    phase8: false,
   });
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
@@ -111,7 +112,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     },
     {
       id: 'phase4',
-      title: 'Phase 4: Generate PRD',
+      title: 'Phase 5: Generate PRD',
       icon: FileCode,
       items: [
         { id: 'functional_reqs', label: 'Generate Functional Requirements (Optional)', description: 'Use /reqs command to create concise requirements' },
@@ -121,7 +122,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     },
     {
       id: 'phase5',
-      title: 'Phase 5: TaskMaster Setup',
+      title: 'Phase 6: TaskMaster Setup',
       icon: ListChecks,
       items: [
         { id: 'taskmaster_config', label: 'Create .taskmaster/config.json', description: 'Configure TaskMaster with model settings' },
@@ -134,7 +135,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     },
     {
       id: 'phase6',
-      title: 'Phase 6: The Overseer Build Loop',
+      title: 'Phase 7: The Overseer Build Loop',
       icon: PlayCircle,
       items: [
         { id: 'start_session', label: 'Start Session', description: 'Use /start command to begin' },
@@ -148,7 +149,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     },
     {
       id: 'phase7',
-      title: 'Phase 7: Testing and Validation',
+      title: 'Phase 8: Testing and Validation',
       icon: TestTube,
       items: [
         { id: 'functional_testing', label: 'Complete Functional Testing', description: 'Verify core functionality works end-to-end' },
