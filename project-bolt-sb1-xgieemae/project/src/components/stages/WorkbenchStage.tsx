@@ -119,10 +119,10 @@ export function WorkbenchStage() {
         />
       </div>
 
-      {/* Main Content Area: Terminal (main, left) | Task List (right column) */}
-      <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
-        {/* Left Column: Terminal (main focus) */}
-        <div className="flex-[2] flex flex-col gap-3 overflow-hidden min-w-0">
+      {/* Main Content Area: Vertical layout with Terminal and TaskList */}
+      <div className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0">
+        {/* Terminal Section - Full Width */}
+        <div className="flex flex-col gap-3 overflow-hidden min-w-0">
           {/* Terminal - Main Focus */}
           <div className="flex-1 min-h-0">
             <TerminalPanel />
@@ -236,8 +236,8 @@ export function WorkbenchStage() {
           </div>
         </div>
 
-        {/* Right Column: Task List (narrow) */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 max-w-md">
+        {/* Task List - Below Terminal */}
+        <div className="flex-shrink-0 flex flex-col overflow-hidden min-w-0 max-h-[400px]">
           <TaskList />
         </div>
       </div>
