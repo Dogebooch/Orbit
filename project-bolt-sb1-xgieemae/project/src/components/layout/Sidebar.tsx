@@ -5,7 +5,6 @@ import {
   Orbit,
   LayoutDashboard,
   Lightbulb,
-  Search,
   ListChecks,
   Code2,
   BookMarked,
@@ -15,6 +14,7 @@ import {
   CheckCircle2,
   Keyboard,
   Lock,
+  Package,
 } from 'lucide-react';
 import { KEYBOARD_SHORTCUTS } from '../../hooks/useKeyboardShortcuts';
 
@@ -23,8 +23,8 @@ interface SidebarProps {
 }
 
 interface StageCompletion {
+  setup: boolean;
   vision: boolean;
-  research: boolean;
   strategy: boolean;
   workbench: boolean;
   promptlibrary: boolean;
@@ -34,8 +34,8 @@ interface StageCompletion {
 export function Sidebar({ onStageChange }: SidebarProps) {
   const { currentStage, currentProject, user, signOut } = useApp();
   const [completion, setCompletion] = useState<StageCompletion>({
+    setup: false,
     vision: false,
-    research: false,
     strategy: false,
     workbench: false,
     promptlibrary: false,
@@ -47,8 +47,8 @@ export function Sidebar({ onStageChange }: SidebarProps) {
   useEffect(() => {
     if (!currentProject) {
       setCompletion({
+        setup: false,
         vision: false,
-        research: false,
         strategy: false,
         workbench: false,
         promptlibrary: false,
@@ -59,13 +59,26 @@ export function Sidebar({ onStageChange }: SidebarProps) {
 
     const calculateCompletion = async () => {
       const newCompletion: StageCompletion = {
+        setup: false,
         vision: false,
-        research: false,
         strategy: false,
         workbench: false,
         promptlibrary: false,
         testing: false,
       };
+
+      // Check Setup completion (from settings)
+      const { data: setupData } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('user_id', user?.id)
+        .eq('key', 'setup_prerequisites')
+        .maybeSingle();
+
+      if (setupData?.value) {
+        const checkedItems = (setupData.value as { checkedItems?: Record<string, boolean> }).checkedItems || {};
+        newCompletion.setup = Object.values(checkedItems).every(Boolean);
+      }
 
       // Check Vision completion
       const { data: visionData } = await supabase
@@ -86,15 +99,6 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         profileData?.primary_user && 
         profileData?.goal
       );
-
-      // Check Research (any apps analyzed)
-      const { data: researchData } = await supabase
-        .from('research_apps')
-        .select('id')
-        .eq('project_id', currentProject.id)
-        .limit(1);
-
-      newCompletion.research = (researchData?.length ?? 0) > 0;
 
       // Check Strategy (PRD exists with content)
       const { data: prdData } = await supabase
@@ -144,9 +148,9 @@ export function Sidebar({ onStageChange }: SidebarProps) {
 
   const stages = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Project Overview', shortcut: '0', noCompletion: true },
-    { id: 'vision', name: 'Foundation', icon: Lightbulb, description: 'Vision & User', shortcut: '1' },
-    { id: 'research', name: 'Research', icon: Search, description: 'Market & Discovery', shortcut: '2' },
-    { id: 'strategy', name: 'Strategy', icon: ListChecks, description: 'PRD & Tasks', shortcut: '3' },
+    { id: 'setup', name: 'Setup', icon: Package, description: 'Prerequisites', shortcut: '1' },
+    { id: 'vision', name: 'Foundation', icon: Lightbulb, description: 'Vision & User', shortcut: '2' },
+    { id: 'strategy', name: 'Strategy', icon: ListChecks, description: 'PRD & Launch', shortcut: '3' },
     { id: 'workbench', name: 'Workbench', icon: Code2, description: 'Build & Code', shortcut: '4', requiresPRD: true },
     { id: 'promptlibrary', name: 'Prompt Library', icon: BookMarked, description: 'Saved Prompts', shortcut: '5' },
     { id: 'testing', name: 'Testing', icon: Rocket, description: 'Ship & Deploy', shortcut: '6' },

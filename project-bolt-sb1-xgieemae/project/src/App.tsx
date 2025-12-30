@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useApp } from './contexts/AppContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ProjectSelector } from './components/layout/ProjectSelector';
+import { SetupStage } from './components/stages/SetupStage';
 import { VisionStage } from './components/stages/VisionStage';
-import { ResearchStage } from './components/stages/ResearchStage';
 import { StrategyStage } from './components/stages/StrategyStage';
 import { WorkbenchStage } from './components/stages/WorkbenchStage';
 import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
@@ -13,7 +13,7 @@ import { SettingsStage } from './components/stages/SettingsStage';
 import { DashboardStage } from './components/stages/DashboardStage';
 import { CommandPalette, CommandIcons } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { AlertCircle, LayoutDashboard } from 'lucide-react';
+import { AlertCircle, LayoutDashboard, Package } from 'lucide-react';
 
 function App() {
   const { currentProject, currentStage, setCurrentStage } = useApp();
@@ -21,6 +21,11 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
+
+  // Sync localStage when currentStage changes from context (e.g., "Continue to Strategy" buttons)
+  useEffect(() => {
+    setLocalStage(currentStage);
+  }, [currentStage]);
 
   const handleStageChange = useCallback((stage: string) => {
     setLocalStage(stage);
@@ -41,9 +46,9 @@ function App() {
   // Commands for command palette
   const commands = [
     { id: 'dashboard', label: 'Go to Dashboard', description: 'View project overview', icon: LayoutDashboard, action: () => handleStageChange('dashboard'), keywords: ['home', 'overview'] },
+    { id: 'setup', label: 'Go to Setup', description: 'Prerequisites', icon: Package, action: () => handleStageChange('setup'), keywords: ['prerequisites', 'start'] },
     { id: 'vision', label: 'Go to Foundation', description: 'Vision & User Profile', icon: CommandIcons.Lightbulb, action: () => handleStageChange('vision'), keywords: ['foundation'] },
-    { id: 'research', label: 'Go to Research', description: 'Market & Discovery', icon: CommandIcons.Search, action: () => handleStageChange('research'), keywords: ['market'] },
-    { id: 'strategy', label: 'Go to Strategy', description: 'PRD & Tasks', icon: CommandIcons.ListChecks, action: () => handleStageChange('strategy'), keywords: ['prd', 'tasks'] },
+    { id: 'strategy', label: 'Go to Strategy', description: 'PRD & Launch', icon: CommandIcons.ListChecks, action: () => handleStageChange('strategy'), keywords: ['prd', 'tasks', 'launch'] },
     { id: 'workbench', label: 'Go to Workbench', description: 'Build & Code', icon: CommandIcons.Code2, action: () => handleStageChange('workbench'), keywords: ['code', 'terminal'] },
     { id: 'promptlibrary', label: 'Go to Prompt Library', description: 'Saved Prompts', icon: CommandIcons.BookMarked, action: () => handleStageChange('promptlibrary'), keywords: ['prompts'] },
     { id: 'testing', label: 'Go to Testing', description: 'Ship & Deploy', icon: CommandIcons.Rocket, action: () => handleStageChange('testing'), keywords: ['deploy', 'ship'] },
@@ -70,10 +75,10 @@ function App() {
     switch (localStage) {
       case 'dashboard':
         return <DashboardStage onNavigate={handleStageChange} />;
+      case 'setup':
+        return <SetupStage />;
       case 'vision':
         return <VisionStage />;
-      case 'research':
-        return <ResearchStage />;
       case 'strategy':
         return <StrategyStage />;
       case 'workbench':

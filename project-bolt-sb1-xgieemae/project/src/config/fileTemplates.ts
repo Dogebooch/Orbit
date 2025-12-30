@@ -16,6 +16,7 @@ export interface TechStackTemplate {
   styling: string[];
   testing: string[];
   buildTools: string[];
+  boltCompatible?: boolean;
   defaultCodingStandards: CodingStandards;
 }
 
@@ -73,6 +74,7 @@ export const TECH_STACK_TEMPLATES: TechStackTemplate[] = [
     styling: ['Tailwind CSS', 'CSS Modules'],
     testing: ['Vitest', 'React Testing Library'],
     buildTools: ['Vite', 'ESLint', 'Prettier'],
+    boltCompatible: true,
     defaultCodingStandards: {
       typescript: true,
       strictMode: true,
@@ -95,6 +97,7 @@ export const TECH_STACK_TEMPLATES: TechStackTemplate[] = [
     styling: ['Tailwind CSS', 'CSS Modules'],
     testing: ['Jest', 'React Testing Library', 'Playwright'],
     buildTools: ['Next.js CLI', 'ESLint', 'Prettier'],
+    boltCompatible: true,
     defaultCodingStandards: {
       typescript: true,
       strictMode: true,
@@ -117,6 +120,7 @@ export const TECH_STACK_TEMPLATES: TechStackTemplate[] = [
     styling: [],
     testing: ['pytest', 'pytest-asyncio'],
     buildTools: ['Poetry', 'Ruff', 'mypy'],
+    boltCompatible: false,
     defaultCodingStandards: {
       typescript: false,
       strictMode: true,
@@ -139,6 +143,7 @@ export const TECH_STACK_TEMPLATES: TechStackTemplate[] = [
     styling: [],
     testing: ['Jest', 'Supertest'],
     buildTools: ['tsup', 'ESLint', 'Prettier'],
+    boltCompatible: false,
     defaultCodingStandards: {
       typescript: true,
       strictMode: true,
@@ -161,6 +166,7 @@ export const TECH_STACK_TEMPLATES: TechStackTemplate[] = [
     styling: [],
     testing: [],
     buildTools: [],
+    boltCompatible: false,
     defaultCodingStandards: {
       typescript: true,
       strictMode: true,

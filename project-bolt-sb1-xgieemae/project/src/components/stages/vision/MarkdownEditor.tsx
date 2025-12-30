@@ -9,7 +9,6 @@ interface VisionData {
   success_metrics: string;
   why_software: string;
   target_level: string;
-  ai_challenge_response: string;
 }
 
 interface UserProfileData {
@@ -18,9 +17,9 @@ interface UserProfileData {
   context: string;
   frustrations: string;
   technical_comfort: string;
-  time_constraints: string;
   persona_name: string;
   persona_role: string;
+  competitor_notes?: string;
 }
 
 interface MarkdownEditorProps {

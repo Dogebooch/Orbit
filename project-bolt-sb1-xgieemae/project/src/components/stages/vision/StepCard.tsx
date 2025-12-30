@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Lightbulb, AlertCircle, CheckCircle2, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronUp, Lightbulb, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Textarea, Input } from '../../ui';
 import type { StepConfig } from './guidedSetupConfig';
 
@@ -28,6 +28,14 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
   const hasValue = step.inputType === 'multi-field'
     ? Object.values(objectValue).some(v => v && v.length > 0)
     : stringValue.length > 0;
+
+  // For multi-field, check if required fields (non-optional) are filled
+  const hasRequiredMultiFieldValues = () => {
+    if (step.inputType !== 'multi-field' || !step.subFields) return true;
+    return step.subFields
+      .filter(sf => !sf.optional)
+      .every(sf => objectValue[sf.id] && objectValue[sf.id].length > 0);
+  };
 
   const renderInput = () => {
     if (step.inputType === 'textarea') {
@@ -83,6 +91,9 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
             <div key={subField.id}>
               <label className="block text-sm font-medium text-primary-300 mb-2">
                 {subField.label}
+                {subField.optional && (
+                  <span className="ml-2 text-xs text-primary-500 font-normal">(optional)</span>
+                )}
               </label>
               {subField.type === 'textarea' ? (
                 <Textarea
@@ -140,13 +151,19 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
                   Required field
                 </span>
               )}
+              {showValidation && step.required && step.inputType === 'multi-field' && hasValue && !hasRequiredMultiFieldValues() && (
+                <span className="text-sm text-amber-400 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Fill in required fields
+                </span>
+              )}
               {showValidation && step.minLength && hasValue && !meetsMinLength && (
                 <span className="text-sm text-amber-400 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {step.validationHint}
                 </span>
               )}
-              {hasValue && meetsMinLength && (
+              {hasValue && meetsMinLength && (step.inputType !== 'multi-field' || hasRequiredMultiFieldValues()) && (
                 <span className="text-sm text-green-400 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
                   Good detail
@@ -215,108 +232,6 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-interface AIChallengeStepProps {
-  visionSummary: string;
-  value: string;
-  onChange: (value: string) => void;
-}
-
-export function AIChallengeStep({ visionSummary, value, onChange }: AIChallengeStepProps) {
-  const [copied, setCopied] = useState(false);
-
-  const challengePrompt = `Challenge this project idea with 5 hard questions. Help me identify potential flaws or missing pieces.
-
-${visionSummary}`;
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(challengePrompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-amber-900/20 border border-amber-700/50 rounded-xl p-6">
-        <div className="flex items-start gap-3 mb-4">
-          <Lightbulb className="w-6 h-6 text-amber-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="font-semibold text-amber-300 mb-2">Why This Step is Critical</h4>
-            <p className="text-sm text-amber-200/80 leading-relaxed">
-              This is one of the most valuable steps in vibe coding. AI can spot blind spots, missing pieces,
-              and potential problems you haven't considered. Addressing these gaps now saves hours of rework later.
-              The challenging questions and your answers will be included in your vision.md file.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-primary-300">
-              Step 1: Copy this prompt
-            </label>
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  <span>Copy Prompt</span>
-                </>
-              )}
-            </button>
-          </div>
-          <div className="bg-primary-900 border border-primary-600 rounded-lg p-4 font-mono text-sm text-primary-300 whitespace-pre-wrap max-h-64 overflow-y-auto">
-            {challengePrompt}
-          </div>
-        </div>
-
-        <div className="bg-primary-800/50 rounded-lg p-4">
-          <h4 className="font-medium text-primary-200 mb-2">Step 2: Get AI's challenging questions</h4>
-          <p className="text-sm text-primary-400">
-            Paste this prompt into any AI (Claude, ChatGPT, Gemini, etc.) and ask it to challenge your idea with 5 hard questions.
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-primary-300 mb-2">
-            Step 3: Record the questions and your answers
-          </label>
-          <p className="text-sm text-primary-400 mb-3">
-            Paste the AI's challenging questions below, then write your thoughtful answers to each one.
-            Be honest - uncomfortable questions often reveal the most important gaps.
-          </p>
-          <Textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={`Example format:
-
-**Question 1: How will you compete with established invoicing tools like FreshBooks?**
-Answer: We're not competing directly - we're focused on the "quick invoice between calls" use case that bigger tools don't optimize for...
-
-**Question 2: What happens when clients don't pay?**
-Answer: For MVP, we'll focus on sending invoices. Payment tracking and reminders are Phase 2...
-
-**Question 3: ...`}
-            rows={12}
-            className="text-base bg-primary-800 border-primary-600 focus:border-primary-400 font-mono text-sm"
-          />
-          <div className="mt-2 text-sm text-primary-500">
-            {value.length} characters
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

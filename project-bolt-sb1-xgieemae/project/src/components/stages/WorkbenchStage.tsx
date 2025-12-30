@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
+import { useSession } from '../../contexts/SessionContext';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Input, StageTips, GitReminder } from '../ui';
 import {
@@ -29,6 +30,8 @@ import {
 import { TerminalPanel } from '../workbench/TerminalPanel';
 import { TaskMasterCommands } from '../workbench/TaskMasterCommands';
 import { TaskQuickActions } from '../workbench/TaskQuickActions';
+import { SessionIndicator } from '../workbench/SessionIndicator';
+import { SessionManager } from '../workbench/SessionManager';
 import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
 import {
   isSubtask,
@@ -54,6 +57,13 @@ interface Task extends TaskType {
 export function WorkbenchStage() {
   const { currentProject, user } = useApp();
   const { setCommandInput, isBackendConnected, taskMasterTasks } = useTerminal();
+  const { 
+    currentSession, 
+    sessionHealth, 
+    shouldStartNewSession, 
+    startNewSession, 
+    addTaskToSession 
+  } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [copiedContext, setCopiedContext] = useState(false);
@@ -72,6 +82,8 @@ export function WorkbenchStage() {
   const [showTaskMasterSync, setShowTaskMasterSync] = useState(false);
   const [importingTasks, setImportingTasks] = useState(false);
   const [lastCompletedTask, setLastCompletedTask] = useState<string | null>(null);
+  const [showSessionManager, setShowSessionManager] = useState(false);
+  const [sessionWarning, setSessionWarning] = useState<{ taskId: string; taskTitle: string } | null>(null);
 
   useEffect(() => {
     if (currentProject) {
@@ -96,6 +108,12 @@ export function WorkbenchStage() {
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     const task = tasks.find((t) => t.id === taskId);
     
+    // Check if we should start a new session when starting a task
+    if (newStatus === 'in_progress' && shouldStartNewSession(taskId)) {
+      setSessionWarning({ taskId, taskTitle: task?.title || 'Unknown task' });
+      return; // Don't update status yet, wait for user decision
+    }
+
     await supabase
       .from('tasks')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
@@ -103,10 +121,53 @@ export function WorkbenchStage() {
 
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
 
+    // Add task to current session when starting it
+    if (newStatus === 'in_progress' && currentSession) {
+      await addTaskToSession(taskId);
+    }
+
     // Show git reminder when task is completed
     if (newStatus === 'completed' && task) {
       setLastCompletedTask(task.title);
     }
+  };
+
+  const handleSessionWarningContinue = async () => {
+    if (!sessionWarning) return;
+    
+    // User chose to continue with current session
+    await supabase
+      .from('tasks')
+      .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+      .eq('id', sessionWarning.taskId);
+
+    setTasks(tasks.map((t) => (t.id === sessionWarning.taskId ? { ...t, status: 'in_progress' } : t)));
+    
+    if (currentSession) {
+      await addTaskToSession(sessionWarning.taskId);
+    }
+    
+    setSessionWarning(null);
+  };
+
+  const handleSessionWarningNewSession = async () => {
+    if (!sessionWarning) return;
+    
+    // Start new session with this task
+    const task = tasks.find(t => t.id === sessionWarning.taskId);
+    const sessionName = task ? `${task.title.substring(0, 30)}...` : undefined;
+    
+    await startNewSession(sessionName, sessionWarning.taskId);
+    
+    // Update task status
+    await supabase
+      .from('tasks')
+      .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+      .eq('id', sessionWarning.taskId);
+
+    setTasks(tasks.map((t) => (t.id === sessionWarning.taskId ? { ...t, status: 'in_progress' } : t)));
+    
+    setSessionWarning(null);
   };
 
   const handleTaskMasterCommand = (prompt: string) => {
@@ -253,6 +314,24 @@ export function WorkbenchStage() {
 
     const sections: string[] = [];
 
+    // Add session metadata at the top
+    if (currentSession) {
+      const taskNumbers = currentSession.task_ids
+        .map(id => {
+          const task = tasks.find(t => t.id === id);
+          return task ? `#${task.order_index + 1}` : null;
+        })
+        .filter(Boolean)
+        .join(', ');
+      
+      sections.push(`## AI Session Context
+**Session:** ${currentSession.session_name}
+**Tasks in Session:** ${taskNumbers || 'None'}
+**Session Health:** ${sessionHealth.status}
+
+> This is part of an ongoing AI conversation session. Keep context from previous interactions in this session.`);
+    }
+
     if (!taskOnly) {
       const { data: visionData } = await supabase
         .from('visions')
@@ -379,6 +458,11 @@ Ready to implement the current task with this context in mind.
         <p className="text-primary-400 mt-2">
           Integrated terminal with TaskMaster AI workflow and vertical task timeline
         </p>
+      </div>
+
+      {/* Session Indicator */}
+      <div className="mb-4">
+        <SessionIndicator onManageClick={() => setShowSessionManager(true)} />
       </div>
 
       <StageTips
@@ -1043,6 +1127,59 @@ Ready to implement the current task with this context in mind.
           onDismiss={() => setLastCompletedTask(null)}
           autoDismissMs={10000}
         />
+      )}
+
+      {/* Session Manager Modal */}
+      <SessionManager
+        isOpen={showSessionManager}
+        onClose={() => setShowSessionManager(false)}
+        suggestedTaskId={currentTask?.id}
+        suggestedSessionName={currentTask ? `${currentTask.title.substring(0, 30)}...` : undefined}
+      />
+
+      {/* Session Warning Modal */}
+      {sessionWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-primary-900 border border-yellow-700/50 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-semibold text-yellow-300 mb-2">
+                  Consider Starting a New Session
+                </h3>
+                <p className="text-sm text-primary-300 mb-3">
+                  You're about to start working on <strong>{sessionWarning.taskTitle}</strong>.
+                </p>
+                <div className="bg-yellow-900/20 border border-yellow-700/30 rounded p-3 mb-3">
+                  <p className="text-xs text-yellow-300 font-medium mb-1">Why start a new session?</p>
+                  <ul className="text-xs text-yellow-200 space-y-1">
+                    {sessionHealth.reasons.map((reason, idx) => (
+                      <li key={idx}>• {reason}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="text-xs text-primary-400">
+                  Starting a fresh AI conversation prevents context pollution and ensures better code quality.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSessionWarningNewSession}
+                className="flex-1"
+              >
+                Start New Session
+              </Button>
+              <Button
+                onClick={handleSessionWarningContinue}
+                variant="secondary"
+                className="flex-1"
+              >
+                Continue Current
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

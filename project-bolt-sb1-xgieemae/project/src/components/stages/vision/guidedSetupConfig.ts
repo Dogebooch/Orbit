@@ -7,7 +7,7 @@ export interface StepExample {
 
 export interface StepConfig {
   id: string;
-  phase: 'vision' | 'user' | 'metrics' | 'challenge';
+  phase: 'vision' | 'user' | 'metrics';
   phaseTitle: string;
   title: string;
   description: string;
@@ -27,19 +27,31 @@ export interface StepConfig {
     placeholder: string;
     type: 'input' | 'textarea';
     rows?: number;
+    optional?: boolean;
   }[];
   minLength?: number;
   validationHint?: string;
 }
 
+export interface AdditionalContextField {
+  id: string;
+  label: string;
+  placeholder: string;
+  field: string;
+  dataType: 'vision' | 'profile';
+  inputType: 'textarea' | 'input' | 'select';
+  rows?: number;
+  options?: { value: string; label: string; description?: string }[];
+}
+
 export const PHASES = [
   { id: 'vision', title: 'Define the Problem', icon: 'Lightbulb', steps: 3 },
-  { id: 'user', title: 'Know Your User', icon: 'Users', steps: 5 },
+  { id: 'user', title: 'Know Your User', icon: 'Users', steps: 1 },
   { id: 'metrics', title: 'Measure Success', icon: 'Target', steps: 2 },
-  { id: 'challenge', title: 'Challenge Your Idea', icon: 'MessageSquare', steps: 1 },
 ];
 
 export const GUIDED_STEPS: StepConfig[] = [
+  // Step 1: Problem Statement (required)
   {
     id: 'problem',
     phase: 'vision',
@@ -68,6 +80,8 @@ export const GUIDED_STEPS: StepConfig[] = [
     minLength: 50,
     validationHint: 'Aim for at least 50 characters with specific details',
   },
+
+  // Step 2: Target User (required)
   {
     id: 'target_user',
     phase: 'vision',
@@ -96,6 +110,8 @@ export const GUIDED_STEPS: StepConfig[] = [
     minLength: 80,
     validationHint: 'Include role, skill level, and at least one specific detail',
   },
+
+  // Step 3: Why Software? (required - changed from optional)
   {
     id: 'why_software',
     phase: 'vision',
@@ -118,161 +134,45 @@ export const GUIDED_STEPS: StepConfig[] = [
       badLabel: 'Not a reason - you need justification',
       goodLabel: 'Compares alternatives, quantifies benefit',
     },
-    required: false,
+    required: true,
     inputType: 'textarea',
     rows: 4,
   },
+
+  // Step 4: User Persona & Goal (required) - MERGED from persona + goal
   {
-    id: 'persona',
+    id: 'persona_goal',
     phase: 'user',
     phaseTitle: 'Know Your User',
-    title: 'Create a primary user persona',
-    description: 'Give your target user a name and identity. This makes it easier to design with empathy and make user-centered decisions.',
-    field: 'persona',
+    title: 'Create your primary user persona and define their goal',
+    description: 'Give your target user a name and identity, then define what success looks like for them. Focus on the outcome they want to achieve.',
+    field: 'persona_goal',
     dataType: 'profile',
     placeholder: '',
-    whyItMatters: 'A named persona makes abstract "users" feel real. When you\'re stuck on a design decision, you can ask "What would Sarah prefer?" instead of "What would users prefer?"',
+    whyItMatters: 'A named persona makes abstract "users" feel real. When you\'re stuck on a design decision, you can ask "What would Sarah prefer?" The goal helps you focus on outcomes, not features.',
     bestPractices: [
-      'Give them a realistic name',
+      'Give them a realistic name (optional but helpful)',
       'Define their specific role or job',
-      'Include one memorable characteristic',
-      'Make them someone you can picture',
+      'Focus on the outcome, not the feature',
+      'Use action words (get, complete, understand, save)',
     ],
     examples: {
-      bad: 'Business user',
-      good: 'Sarah, a freelance graphic designer who bills 10-15 clients per month',
-      badLabel: 'Generic, forgettable',
-      goodLabel: 'Named, specific role, quantified detail',
+      bad: 'Business user wants a dashboard',
+      good: 'Sarah, a freelance designer, wants to get paid faster by sending professional invoices immediately after completing work',
+      badLabel: 'Generic, feature-focused',
+      goodLabel: 'Named persona, outcome-focused with clear benefit',
     },
     required: true,
     inputType: 'multi-field',
     subFields: [
-      { id: 'persona_name', label: 'Persona Name', placeholder: 'e.g., Sarah, Mike, Alex', type: 'input' },
-      { id: 'persona_role', label: 'Role / Job Title', placeholder: 'e.g., freelance graphic designer, small business owner', type: 'input' },
-      { id: 'primary_user', label: 'Full Description', placeholder: 'e.g., Sarah is a freelance graphic designer who bills 10-15 clients per month and prefers quick, simple tools over feature-rich software', type: 'textarea', rows: 3 },
+      { id: 'persona_name', label: 'Persona Name (optional)', placeholder: 'e.g., Sarah, Mike, Alex', type: 'input', optional: true },
+      { id: 'persona_role', label: 'Role / Job Title (optional)', placeholder: 'e.g., freelance graphic designer, small business owner', type: 'input', optional: true },
+      { id: 'primary_user', label: 'User Description', placeholder: 'e.g., A freelance graphic designer who bills 10-15 clients per month and prefers quick, simple tools', type: 'textarea', rows: 2 },
+      { id: 'goal', label: 'User Goal (Job-to-be-done)', placeholder: 'e.g., Get paid faster by sending professional invoices immediately after completing work', type: 'textarea', rows: 2 },
     ],
   },
-  {
-    id: 'goal',
-    phase: 'user',
-    phaseTitle: 'Know Your User',
-    title: 'What is their "job-to-be-done"?',
-    description: 'Focus on the outcome they want to achieve, not features they might use. What does success look like for them after using your software?',
-    field: 'goal',
-    dataType: 'profile',
-    placeholder: 'Example: Get paid faster by sending professional invoices immediately after completing work, without context switching to accounting software',
-    whyItMatters: 'The "job-to-be-done" framework helps you focus on outcomes, not features. Users don\'t want "a dashboard" - they want to "understand their business at a glance."',
-    bestPractices: [
-      'Focus on the outcome, not the feature',
-      'Use action words (get, complete, understand, save)',
-      'Include the benefit or result they want',
-      'Avoid technical or feature-focused language',
-    ],
-    examples: {
-      bad: 'Users have a dashboard',
-      good: 'Get paid faster by sending professional invoices immediately after completing work',
-      badLabel: 'Feature-focused, no outcome',
-      goodLabel: 'Outcome-focused with clear benefit',
-    },
-    required: true,
-    inputType: 'textarea',
-    rows: 3,
-    minLength: 30,
-  },
-  {
-    id: 'context',
-    phase: 'user',
-    phaseTitle: 'Know Your User',
-    title: 'When and where will they use this?',
-    description: 'Context shapes everything - the device they use, how much time they have, and what environment they\'re in all affect your design decisions.',
-    field: 'context',
-    dataType: 'profile',
-    placeholder: 'Example: Right after finishing a client project, usually on a laptop, often between meetings or calls. Needs to be faster than writing an email. Sometimes on mobile when traveling.',
-    whyItMatters: 'Context reveals critical constraints. Someone using your app "between meetings" needs a completely different UX than someone with "dedicated time at their desk."',
-    bestPractices: [
-      'Describe WHEN they\'ll use it (time of day, triggers)',
-      'Mention WHERE (office, home, on-the-go)',
-      'Note the device (desktop, mobile, tablet)',
-      'Include time pressure or interruption likelihood',
-    ],
-    required: false,
-    inputType: 'textarea',
-    rows: 3,
-  },
-  {
-    id: 'frustrations',
-    phase: 'user',
-    phaseTitle: 'Know Your User',
-    title: 'What frustrates them about current solutions?',
-    description: 'Understanding pain points guides what to avoid and what to optimize for. These frustrations become your competitive advantages.',
-    field: 'frustrations',
-    dataType: 'profile',
-    placeholder: 'Example: Too many steps to create a simple invoice. Requires learning accounting concepts. Loses context switching between tools. Templates look unprofessional. Can\'t easily track who\'s paid.',
-    whyItMatters: 'Frustrations are goldmines for differentiation. If users hate "too many steps," your app should minimize steps. If they hate "unprofessional templates," invest in great defaults.',
-    bestPractices: [
-      'List specific pain points, not general complaints',
-      'Include both functional issues (slow, complex)',
-      'Include emotional issues (confusing, frustrating)',
-      'Prioritize the most common or severe frustrations',
-    ],
-    required: false,
-    inputType: 'textarea',
-    rows: 4,
-  },
-  {
-    id: 'technical_comfort',
-    phase: 'user',
-    phaseTitle: 'Know Your User',
-    title: 'What is their technical comfort level?',
-    description: 'This determines how much complexity your UI can have and how much guidance users need. Match your interface to their abilities.',
-    field: 'technical_comfort',
-    dataType: 'profile',
-    placeholder: '',
-    whyItMatters: 'Technical comfort directly impacts your UI decisions. Low comfort = simple, guided interfaces with no jargon. High comfort = power features, keyboard shortcuts, advanced options.',
-    bestPractices: [
-      'Be realistic - don\'t assume your users are like you',
-      'Consider the range within your user base',
-      'When in doubt, design for lower comfort',
-    ],
-    required: true,
-    inputType: 'select',
-    options: [
-      {
-        value: 'low',
-        label: 'Low - Needs simple, guided interfaces',
-        description: 'No technical background. Avoid jargon. Use wizards and step-by-step flows. Provide clear feedback for every action.'
-      },
-      {
-        value: 'medium',
-        label: 'Medium - Comfortable with standard apps',
-        description: 'Uses common apps daily. Understands basic patterns like forms, lists, dashboards. Can figure out standard interfaces without tutorials.'
-      },
-      {
-        value: 'high',
-        label: 'High - Can handle advanced features',
-        description: 'Power user who appreciates keyboard shortcuts, bulk actions, advanced filters. Okay with some complexity if it saves time.'
-      },
-    ],
-  },
-  {
-    id: 'time_constraints',
-    phase: 'user',
-    phaseTitle: 'Know Your User',
-    title: 'How much time do they have for this task?',
-    description: 'Time constraints directly impact your UX decisions and feature prioritization. Quick tasks need streamlined interfaces.',
-    field: 'time_constraints',
-    dataType: 'profile',
-    placeholder: 'Example: Under 2 minutes between meetings. Needs to be faster than writing an email. Sometimes just 30 seconds on mobile.',
-    whyItMatters: 'Time constraints shape everything from feature scope to interaction design. A 2-minute task needs a very different UX than a 30-minute task.',
-    bestPractices: [
-      'Be specific with time estimates',
-      'Consider best case vs typical case',
-      'Note if they\'re often interrupted',
-      'Compare to something familiar ("faster than email")',
-    ],
-    required: false,
-    inputType: 'input',
-  },
+
+  // Step 5: Target Level (required)
   {
     id: 'target_level',
     phase: 'metrics',
@@ -313,6 +213,8 @@ export const GUIDED_STEPS: StepConfig[] = [
       },
     ],
   },
+
+  // Step 6: Success Metrics (optional)
   {
     id: 'success_metrics',
     phase: 'metrics',
@@ -339,25 +241,61 @@ export const GUIDED_STEPS: StepConfig[] = [
     inputType: 'textarea',
     rows: 5,
   },
+];
+
+// Additional context fields (shown in collapsible section)
+export const ADDITIONAL_CONTEXT_FIELDS: AdditionalContextField[] = [
   {
-    id: 'ai_challenge',
-    phase: 'challenge',
-    phaseTitle: 'Challenge Your Idea',
-    title: 'Challenge your assumptions with AI',
-    description: 'Before you start building, use AI to stress-test your idea. This forces you to address gaps and potential issues before they become expensive problems.',
-    field: 'ai_challenge_response',
-    dataType: 'vision',
-    placeholder: 'Paste the challenging questions from the AI and write your answers to each one here...',
-    whyItMatters: 'This is one of the most valuable steps in vibe coding. AI can spot blind spots, missing pieces, and potential problems you haven\'t considered. Addressing these now saves hours of rework later.',
-    bestPractices: [
-      'Use the provided prompt in any AI (Claude, ChatGPT, etc.)',
-      'Don\'t skip questions that make you uncomfortable',
-      'Be honest in your answers',
-      'Update your vision if the AI reveals important gaps',
-    ],
-    required: false,
+    id: 'context',
+    label: 'When & Where',
+    placeholder: 'When and where will users use this? e.g., Right after finishing a client project, usually on a laptop, often between meetings...',
+    field: 'context',
+    dataType: 'profile',
     inputType: 'textarea',
-    rows: 8,
+    rows: 3,
+  },
+  {
+    id: 'frustrations',
+    label: 'Current Frustrations',
+    placeholder: 'What frustrates them about current solutions? e.g., Too many steps, requires learning accounting concepts, templates look unprofessional...',
+    field: 'frustrations',
+    dataType: 'profile',
+    inputType: 'textarea',
+    rows: 3,
+  },
+  {
+    id: 'technical_comfort',
+    label: 'Technical Comfort Level',
+    placeholder: '',
+    field: 'technical_comfort',
+    dataType: 'profile',
+    inputType: 'select',
+    options: [
+      {
+        value: 'low',
+        label: 'Low - Needs simple, guided interfaces',
+        description: 'No technical background. Avoid jargon. Use wizards and step-by-step flows.'
+      },
+      {
+        value: 'medium',
+        label: 'Medium - Comfortable with standard apps',
+        description: 'Uses common apps daily. Understands basic patterns like forms, lists, dashboards.'
+      },
+      {
+        value: 'high',
+        label: 'High - Can handle advanced features',
+        description: 'Power user who appreciates keyboard shortcuts, bulk actions, advanced filters.'
+      },
+    ],
+  },
+  {
+    id: 'competitor_notes',
+    label: 'Competitor Research Notes',
+    placeholder: 'Notes from researching similar apps. What do they do well? What do users complain about? What would you steal or avoid?',
+    field: 'competitor_notes',
+    dataType: 'profile',
+    inputType: 'textarea',
+    rows: 4,
   },
 ];
 

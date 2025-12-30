@@ -13,10 +13,11 @@ interface UserProfileData {
   context: string;
   frustrations: string;
   technical_comfort: string;
-  time_constraints: string;
+  time_constraints?: string;
   persona_name?: string;
   persona_role?: string;
   device_preference?: string;
+  competitor_notes?: string;
 }
 
 interface SuccessMetricsData {
@@ -163,13 +164,17 @@ export function userProfileToMarkdown(profile: UserProfileData): string {
   sections.push(TECHNICAL_COMFORT_DESCRIPTIONS[comfort] || comfort);
   sections.push('');
 
-  sections.push('## Time Constraints');
   if (profile.time_constraints) {
+    sections.push('## Time Constraints');
     sections.push(profile.time_constraints);
-  } else {
-    sections.push('_Not yet defined_');
+    sections.push('');
   }
-  sections.push('');
+
+  if (profile.competitor_notes) {
+    sections.push('## Competitor Research Notes');
+    sections.push(profile.competitor_notes);
+    sections.push('');
+  }
 
   sections.push('---');
   sections.push('');
@@ -196,7 +201,7 @@ export function userProfileToMarkdown(profile: UserProfileData): string {
     implications.push('- Provide progressive disclosure for advanced features');
   }
 
-  if (profile.time_constraints && profile.time_constraints.toLowerCase().includes('minute')) {
+  if (profile.time_constraints?.toLowerCase().includes('minute')) {
     implications.push('- Optimize for speed - minimize clicks and loading times');
     implications.push('- Use smart defaults and auto-fill where possible');
   }

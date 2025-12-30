@@ -4,13 +4,16 @@ import './index.css';
 import App from './App';
 import { AppProvider } from './contexts/AppContext';
 import { TerminalProvider } from './contexts/TerminalContext';
+import { SessionProvider } from './contexts/SessionContext';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
-      <TerminalProvider>
-        <App />
-      </TerminalProvider>
+      <SessionProvider>
+        <TerminalProvider>
+          <App />
+        </TerminalProvider>
+      </SessionProvider>
     </AppProvider>
   </StrictMode>
 );

@@ -16,7 +16,6 @@ interface VisionData {
   success_metrics: string;
   why_software: string;
   target_level: string;
-  ai_challenge_response: string;
 }
 
 interface UserProfileData {
@@ -25,9 +24,9 @@ interface UserProfileData {
   context: string;
   frustrations: string;
   technical_comfort: string;
-  time_constraints: string;
   persona_name: string;
   persona_role: string;
+  competitor_notes: string;
 }
 
 type EditMode = 'guided' | 'editor' | 'quickstart' | 'import';
@@ -41,7 +40,6 @@ export function VisionStage() {
     success_metrics: '',
     why_software: '',
     target_level: 'mvp',
-    ai_challenge_response: '',
   });
   const [userProfile, setUserProfile] = useState<UserProfileData>({
     primary_user: '',
@@ -49,9 +47,9 @@ export function VisionStage() {
     context: '',
     frustrations: '',
     technical_comfort: 'medium',
-    time_constraints: '',
     persona_name: '',
     persona_role: '',
+    competitor_notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | undefined>();
@@ -88,7 +86,6 @@ export function VisionStage() {
         success_metrics: visionData.success_metrics || '',
         why_software: visionData.why_software || '',
         target_level: visionData.target_level || 'mvp',
-        ai_challenge_response: visionData.ai_challenge_response || '',
       });
       if (visionData.problem || visionData.target_user) {
         setMode('editor');
@@ -108,9 +105,9 @@ export function VisionStage() {
         context: profileData.context || '',
         frustrations: profileData.frustrations || '',
         technical_comfort: profileData.technical_comfort || 'medium',
-        time_constraints: profileData.time_constraints || '',
         persona_name: profileData.persona_name || '',
         persona_role: profileData.persona_role || '',
+        competitor_notes: profileData.competitor_notes || '',
       });
     }
   };
@@ -335,12 +332,15 @@ export function VisionStage() {
                       }
                       setShowDownloadMenu(false); 
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-primary-700 transition-colors border-b border-primary-700 flex items-center gap-3"
+                    className="w-full px-4 py-3 text-left hover:bg-primary-700 transition-colors border-b border-primary-700 flex items-start gap-3 group"
                   >
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-4 h-4 text-purple-400 mt-0.5" />
                     <div>
                       <span className="text-primary-100 font-medium">CLAUDE.md</span>
-                      <span className="block text-xs text-primary-400">AI context file</span>
+                      <span className="block text-xs text-primary-400 mb-1">AI context file for Claude Code</span>
+                      <span className="block text-xs text-purple-300/70 group-hover:text-purple-300">
+                        Place in project root. Tells Claude your stack, conventions & current task.
+                      </span>
                     </div>
                   </button>
                   <button

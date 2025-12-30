@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '../../ui';
-import { ChevronLeft, ChevronRight, CheckCircle2, Circle, Lightbulb, Users, Target, MessageSquare } from 'lucide-react';
-import { GUIDED_STEPS, PHASES, type StepConfig } from './guidedSetupConfig';
-import { StepCard, AIChallengeStep } from './StepCard';
+import { ChevronLeft, ChevronRight, CheckCircle2, Circle, Lightbulb, Users, Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { GUIDED_STEPS, PHASES, ADDITIONAL_CONTEXT_FIELDS, type StepConfig, type AdditionalContextField } from './guidedSetupConfig';
+import { StepCard } from './StepCard';
 
 interface VisionData {
   problem: string;
@@ -10,7 +10,6 @@ interface VisionData {
   success_metrics: string;
   why_software: string;
   target_level: string;
-  ai_challenge_response: string;
 }
 
 interface UserProfileData {
@@ -19,9 +18,9 @@ interface UserProfileData {
   context: string;
   frustrations: string;
   technical_comfort: string;
-  time_constraints: string;
   persona_name: string;
   persona_role: string;
+  competitor_notes?: string;
 }
 
 interface GuidedSetupProps {
@@ -36,7 +35,6 @@ const phaseIcons: Record<string, React.ElementType> = {
   vision: Lightbulb,
   user: Users,
   metrics: Target,
-  challenge: MessageSquare,
 };
 
 export function GuidedSetup({
@@ -48,14 +46,16 @@ export function GuidedSetup({
 }: GuidedSetupProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showValidation, setShowValidation] = useState(false);
+  const [showAdditionalContext, setShowAdditionalContext] = useState(false);
   const step = GUIDED_STEPS[currentStep];
 
   const getValue = (s: StepConfig): string | Record<string, string> => {
-    if (s.inputType === 'multi-field' && s.id === 'persona') {
+    if (s.inputType === 'multi-field' && s.id === 'persona_goal') {
       return {
         persona_name: userProfile.persona_name || '',
         persona_role: userProfile.persona_role || '',
         primary_user: userProfile.primary_user || '',
+        goal: userProfile.goal || '',
       };
     }
     if (s.dataType === 'vision') {
@@ -65,12 +65,13 @@ export function GuidedSetup({
   };
 
   const setValue = (s: StepConfig, value: string | Record<string, string>) => {
-    if (s.inputType === 'multi-field' && s.id === 'persona' && typeof value === 'object') {
+    if (s.inputType === 'multi-field' && s.id === 'persona_goal' && typeof value === 'object') {
       onUserProfileChange({
         ...userProfile,
         persona_name: value.persona_name || '',
         persona_role: value.persona_role || '',
         primary_user: value.primary_user || '',
+        goal: value.goal || '',
       });
       return;
     }
@@ -81,10 +82,27 @@ export function GuidedSetup({
     }
   };
 
+  const getAdditionalContextValue = (field: AdditionalContextField): string => {
+    if (field.dataType === 'vision') {
+      return (vision as Record<string, string>)[field.field] || '';
+    }
+    return (userProfile as Record<string, string>)[field.field] || '';
+  };
+
+  const setAdditionalContextValue = (field: AdditionalContextField, value: string) => {
+    if (field.dataType === 'vision') {
+      onVisionChange({ ...vision, [field.field]: value });
+    } else {
+      onUserProfileChange({ ...userProfile, [field.field]: value });
+    }
+  };
+
   const isStepComplete = (s: StepConfig): boolean => {
     const val = getValue(s);
     if (typeof val === 'object') {
-      return Object.values(val).some(v => v && v.length > 0);
+      // For multi-field, check if required fields have values
+      // primary_user and goal are required, persona_name and persona_role are optional
+      return !!(val.primary_user && val.primary_user.length > 0 && val.goal && val.goal.length > 0);
     }
     return val && val.length > 0;
   };
@@ -132,15 +150,12 @@ export function GuidedSetup({
     return Math.round((completed / GUIDED_STEPS.length) * 100);
   }, [vision, userProfile]);
 
-  const visionSummary = useMemo(() => {
-    const parts: string[] = [];
-    if (vision.problem) parts.push(`**Problem:** ${vision.problem}`);
-    if (vision.target_user) parts.push(`**Target User:** ${vision.target_user}`);
-    if (userProfile.primary_user) parts.push(`**Primary User Persona:** ${userProfile.persona_name || ''} - ${userProfile.primary_user}`);
-    if (userProfile.goal) parts.push(`**User Goal:** ${userProfile.goal}`);
-    if (vision.why_software) parts.push(`**Why Software:** ${vision.why_software}`);
-    if (vision.success_metrics) parts.push(`**Success Metrics:** ${vision.success_metrics}`);
-    return parts.join('\n\n');
+  // Count filled additional context fields
+  const additionalContextCount = useMemo(() => {
+    return ADDITIONAL_CONTEXT_FIELDS.filter(field => {
+      const value = getAdditionalContextValue(field);
+      return value && value.length > 0;
+    }).length;
   }, [vision, userProfile]);
 
   return (
@@ -161,7 +176,7 @@ export function GuidedSetup({
           />
         </div>
 
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {PHASES.map((phase) => {
             const Icon = phaseIcons[phase.id] || Lightbulb;
             const progress = phaseProgress[phase.id];
@@ -244,14 +259,12 @@ export function GuidedSetup({
           <div className={`p-2 rounded-lg ${
             currentPhase === 'vision' ? 'bg-amber-900/50' :
             currentPhase === 'user' ? 'bg-blue-900/50' :
-            currentPhase === 'metrics' ? 'bg-green-900/50' :
-            'bg-purple-900/50'
+            'bg-green-900/50'
           }`}>
             <PhaseIcon className={`w-5 h-5 ${
               currentPhase === 'vision' ? 'text-amber-400' :
               currentPhase === 'user' ? 'text-blue-400' :
-              currentPhase === 'metrics' ? 'text-green-400' :
-              'text-purple-400'
+              'text-green-400'
             }`} />
           </div>
           <span className="text-sm font-medium text-primary-400">{step.phaseTitle}</span>
@@ -265,19 +278,71 @@ export function GuidedSetup({
         <h2 className="text-2xl font-bold text-primary-100 mb-2">{step.title}</h2>
         <p className="text-primary-400 mb-6">{step.description}</p>
 
-        {step.id === 'ai_challenge' ? (
-          <AIChallengeStep
-            visionSummary={visionSummary}
-            value={typeof getValue(step) === 'string' ? getValue(step) as string : ''}
-            onChange={(value) => setValue(step, value)}
-          />
-        ) : (
-          <StepCard
-            step={step}
-            value={getValue(step)}
-            onChange={(value) => setValue(step, value)}
-            showValidation={showValidation}
-          />
+        <StepCard
+          step={step}
+          value={getValue(step)}
+          onChange={(value) => setValue(step, value)}
+          showValidation={showValidation}
+        />
+      </div>
+
+      {/* Additional Context Section (Collapsible) */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowAdditionalContext(!showAdditionalContext)}
+          className="w-full flex items-center justify-between p-4 bg-primary-800/50 border border-primary-700 rounded-lg hover:bg-primary-800/70 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-primary-200 font-medium">Additional Context</span>
+            <span className="text-xs text-primary-500">(optional)</span>
+            {additionalContextCount > 0 && (
+              <span className="px-2 py-0.5 text-xs bg-green-900/50 text-green-400 rounded-full">
+                {additionalContextCount} filled
+              </span>
+            )}
+          </div>
+          {showAdditionalContext ? (
+            <ChevronUp className="w-5 h-5 text-primary-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-primary-400" />
+          )}
+        </button>
+
+        {showAdditionalContext && (
+          <div className="mt-3 p-6 bg-primary-800/30 border border-primary-700/50 rounded-lg space-y-5 animate-fade-in">
+            <p className="text-sm text-primary-400 mb-4">
+              These optional fields provide extra context that helps AI make better decisions about UX and implementation.
+            </p>
+            {ADDITIONAL_CONTEXT_FIELDS.map((field) => (
+              <div key={field.id}>
+                <label className="block text-sm font-medium text-primary-300 mb-2">
+                  {field.label}
+                </label>
+                {field.inputType === 'select' && field.options ? (
+                  <select
+                    value={getAdditionalContextValue(field)}
+                    onChange={(e) => setAdditionalContextValue(field, e.target.value)}
+                    className="w-full bg-primary-900 border border-primary-700 rounded-lg px-4 py-2.5 text-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  >
+                    <option value="">Select...</option>
+                    {field.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <textarea
+                    value={getAdditionalContextValue(field)}
+                    onChange={(e) => setAdditionalContextValue(field, e.target.value)}
+                    placeholder={field.placeholder}
+                    rows={field.rows || 3}
+                    className="w-full bg-primary-900 border border-primary-700 rounded-lg px-4 py-3 text-primary-100 placeholder-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

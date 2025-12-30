@@ -106,6 +106,7 @@ export interface PRD {
   id: string;
   project_id: string;
   content: string;
+  out_of_scope: string;
   created_at: string;
   updated_at: string;
 }
