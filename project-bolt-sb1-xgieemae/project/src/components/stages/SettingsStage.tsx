@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
 import { supabase } from '../../lib/supabase';
-import { Card, Button, useFirstVisit, Input } from '../ui';
+import { Card, Button, Input } from '../ui';
 import {
   Settings,
   Copy,
@@ -64,8 +64,6 @@ export function SettingsStage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  const isFirstVisit = useFirstVisit('settings');
 
   // Update project path when working directory changes
   useEffect(() => {
@@ -230,11 +228,24 @@ export function SettingsStage() {
       );
 
       // Delete project-specific settings
-      await supabase
+      // First fetch settings that match the criteria, then delete by ID
+      const { data: settingsToDelete } = await supabase
         .from('settings')
-        .delete()
-        .eq('user_id', user.id)
-        .like('key', `%_${projectId}`);
+        .select('id, key')
+        .eq('user_id', user.id);
+      
+      if (settingsToDelete) {
+        const matchingSettings = settingsToDelete.filter((setting: { id: string; key: string | null }) => 
+          setting.key && setting.key.includes(`_${projectId}`)
+        );
+        
+        // Delete each matching setting individually
+        await Promise.all(
+          matchingSettings.map((setting: { id: string }) =>
+            supabase.from('settings').delete().eq('id', setting.id)
+          )
+        );
+      }
 
       // Reset project to initial state
       await supabase
@@ -292,11 +303,24 @@ export function SettingsStage() {
       if (deleteError) throw deleteError;
 
       // Delete project-specific settings
-      await supabase
+      // First fetch settings that match the criteria, then delete by ID
+      const { data: settingsToDelete } = await supabase
         .from('settings')
-        .delete()
-        .eq('user_id', user.id)
-        .like('key', `%_${projectId}`);
+        .select('id, key')
+        .eq('user_id', user.id);
+      
+      if (settingsToDelete) {
+        const matchingSettings = settingsToDelete.filter((setting: { id: string; key: string | null }) => 
+          setting.key && setting.key.includes(`_${projectId}`)
+        );
+        
+        // Delete each matching setting individually
+        await Promise.all(
+          matchingSettings.map((setting: { id: string }) =>
+            supabase.from('settings').delete().eq('id', setting.id)
+          )
+        );
+      }
 
       // Clear project folder via WebSocket if backend is connected
       if (isBackendConnected && wsClient) {
