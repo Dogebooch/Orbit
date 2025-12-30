@@ -226,7 +226,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
                     <span className="text-[10px] text-amber-600">Needs PRD</span>
                   ) : (
                     <kbd className="hidden group-hover:inline-block px-1.5 py-0.5 text-[10px] bg-primary-700 text-primary-400 rounded">
-                      ⌘{stage.shortcut}
+                      Ctrl+{stage.shortcut}
                     </kbd>
                   )}
                 </div>

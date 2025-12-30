@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../../ui';
 import { FileText, RefreshCw } from 'lucide-react';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile } from '../../../utils/markdownUtils';
@@ -44,25 +44,45 @@ export function MarkdownEditor({
   const [visionMarkdown, setVisionMarkdown] = useState('');
   const [profileMarkdown, setProfileMarkdown] = useState('');
   const [metricsMarkdown, setMetricsMarkdown] = useState('');
+  
+  // Refs to track if the change is from user editing (internal) vs prop updates (external)
+  const isInternalVisionChange = useRef(false);
+  const isInternalProfileChange = useRef(false);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
+    // Skip regenerating markdown if the change was from user editing
+    if (isInternalVisionChange.current) {
+      isInternalVisionChange.current = false;
+      return;
+    }
     setVisionMarkdown(visionToMarkdown(vision));
     setMetricsMarkdown(successMetricsToMarkdown(vision));
+    isInitialized.current = true;
   }, [vision]);
 
   useEffect(() => {
+    // Skip regenerating markdown if the change was from user editing
+    if (isInternalProfileChange.current) {
+      isInternalProfileChange.current = false;
+      return;
+    }
     setProfileMarkdown(userProfileToMarkdown(userProfile));
   }, [userProfile]);
 
   const handleVisionMarkdownChange = (value: string) => {
     setVisionMarkdown(value);
     const parsed = markdownToVision(value);
+    // Mark as internal change so useEffect doesn't overwrite
+    isInternalVisionChange.current = true;
     onVisionChange({ ...vision, ...parsed });
   };
 
   const handleProfileMarkdownChange = (value: string) => {
     setProfileMarkdown(value);
     const parsed = markdownToUserProfile(value);
+    // Mark as internal change so useEffect doesn't overwrite
+    isInternalProfileChange.current = true;
     onUserProfileChange({ ...userProfile, ...parsed });
   };
 
