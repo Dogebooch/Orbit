@@ -15,6 +15,7 @@ import {
   Edit,
   Trash2,
   Zap,
+  Bug,
 } from 'lucide-react';
 import { Input } from '../ui';
 
@@ -42,7 +43,7 @@ const COMMANDS: TaskMasterCommand[] = [
     prompt: "I've initialized a new project with Claude Task Master. I have a PRD at scripts/prd.txt. Can you parse it and set up initial tasks?",
     category: 'setup',
     icon: FileText,
-    description: 'Parse your PRD file and generate initial task structure',
+    description: 'Parse your PRD file and generate initial task structure. Note: If Claude Code shows a JSON parsing error, use Cursor first then switch back.',
   },
   {
     id: 'init-taskmaster',
@@ -115,6 +116,14 @@ const COMMANDS: TaskMasterCommand[] = [
     category: 'management',
     icon: Plus,
     description: 'Create a new task with requirements',
+  },
+  {
+    id: 'create-bug-task',
+    label: 'Create Bug Fix Task',
+    prompt: 'The [FEATURE] is not working as expected. Create a new task to fix it:\n\n- Expected behavior: [WHAT SHOULD HAPPEN]\n- Actual behavior: [WHAT IS HAPPENING]\n\nRequirements for the fix:\n- the fix should [REQUIREMENT 1]\n- it should [REQUIREMENT 2]',
+    category: 'management',
+    icon: Bug,
+    description: 'Turn a bug into a tracked task with clear requirements',
   },
   {
     id: 'update-task',

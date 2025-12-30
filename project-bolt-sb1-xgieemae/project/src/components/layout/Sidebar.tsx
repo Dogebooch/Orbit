@@ -9,6 +9,7 @@ import {
   Code2,
   BookMarked,
   Rocket,
+  RefreshCw,
   Settings,
   LogOut,
   CheckCircle2,
@@ -29,6 +30,7 @@ interface StageCompletion {
   workbench: boolean;
   promptlibrary: boolean;
   testing: boolean;
+  maintenance: boolean;
 }
 
 export function Sidebar({ onStageChange }: SidebarProps) {
@@ -40,6 +42,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
     workbench: false,
     promptlibrary: false,
     testing: false,
+    maintenance: false,
   });
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -53,6 +56,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         workbench: false,
         promptlibrary: false,
         testing: false,
+        maintenance: false,
       });
       return;
     }
@@ -65,6 +69,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         workbench: false,
         promptlibrary: false,
         testing: false,
+        maintenance: false,
       };
 
       // Check Setup completion (from settings)
@@ -140,6 +145,21 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         newCompletion.testing = completed >= 5;
       }
 
+      // Check Maintenance (has reviews or feedback)
+      const { data: reviewsData } = await supabase
+        .from('maintenance_reviews')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .limit(1);
+
+      const { data: feedbackData } = await supabase
+        .from('user_feedback')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .limit(1);
+
+      newCompletion.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
+
       setCompletion(newCompletion);
     };
 
@@ -154,6 +174,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
     { id: 'workbench', name: 'Workbench', icon: Code2, description: 'Build & Code', shortcut: '4', requiresPRD: true },
     { id: 'promptlibrary', name: 'Prompt Library', icon: BookMarked, description: 'Saved Prompts', shortcut: '5' },
     { id: 'testing', name: 'Testing', icon: Rocket, description: 'Ship & Deploy', shortcut: '6' },
+    { id: 'maintenance', name: 'Maintenance', icon: RefreshCw, description: 'Reviews & Feedback', shortcut: '7' },
   ];
 
   const completedCount = Object.values(completion).filter(Boolean).length;

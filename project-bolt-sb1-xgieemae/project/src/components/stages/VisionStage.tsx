@@ -2,11 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, StageTips, useFirstVisit } from '../ui';
-import { Lightbulb, Download, Wand2, FileEdit, CheckCircle, FileText, ChevronDown, Sparkles, FolderSearch } from 'lucide-react';
+import { Lightbulb, Download, Wand2, FileEdit, CheckCircle, FileText, ChevronDown, Sparkles } from 'lucide-react';
 import { GuidedSetup } from './vision/GuidedSetup';
 import { MarkdownEditor } from './vision/MarkdownEditor';
-import { QuickStart } from './vision/QuickStart';
-import { CodebaseScanner } from './vision/CodebaseScanner';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown } from '../../utils/markdownUtils';
 import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
 
@@ -29,7 +27,7 @@ interface UserProfileData {
   competitor_notes: string;
 }
 
-type EditMode = 'guided' | 'editor' | 'quickstart' | 'import';
+type EditMode = 'guided' | 'editor';
 
 export function VisionStage() {
   const { currentProject, setCurrentStage } = useApp();
@@ -272,22 +270,6 @@ export function VisionStage() {
         <div className="flex items-center justify-between mb-6 -mx-6 -mt-6 px-6 py-4 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
           <div className="flex gap-2 flex-wrap">
             <Button
-              variant={mode === 'quickstart' ? 'primary' : 'ghost'}
-              onClick={() => setMode('quickstart')}
-              title="Generate foundation with AI"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              AI Quick Start
-            </Button>
-            <Button
-              variant={mode === 'import' ? 'primary' : 'ghost'}
-              onClick={() => setMode('import')}
-              title="Import from existing codebase"
-            >
-              <FolderSearch className="w-4 h-4 mr-2" />
-              Import
-            </Button>
-            <Button
               variant={mode === 'guided' ? 'primary' : 'ghost'}
               onClick={() => setMode('guided')}
             >
@@ -375,51 +357,7 @@ export function VisionStage() {
           </div>
         </div>
 
-        {mode === 'quickstart' ? (
-          <QuickStart
-            projectName={currentProject?.name || 'My Project'}
-            onGenerate={(data) => {
-              setVision({
-                ...vision,
-                problem: data.vision.problem,
-                target_user: data.vision.target_user,
-                success_metrics: data.vision.success_metrics,
-                why_software: data.vision.why_software,
-              });
-              setUserProfile({
-                ...userProfile,
-                primary_user: data.userProfile.primary_user,
-                goal: data.userProfile.goal,
-                context: data.userProfile.context,
-                frustrations: data.userProfile.frustrations,
-                technical_comfort: data.userProfile.technical_comfort,
-                persona_name: data.userProfile.persona_name,
-                persona_role: data.userProfile.persona_role,
-              });
-              setMode('editor');
-              triggerAutoSave();
-            }}
-          />
-        ) : mode === 'import' ? (
-          <CodebaseScanner
-            onImport={(data) => {
-              setVision({
-                ...vision,
-                problem: data.vision.problem,
-                target_user: data.vision.target_user,
-                success_metrics: data.vision.success_metrics,
-                why_software: data.vision.why_software,
-              });
-              setUserProfile({
-                ...userProfile,
-                primary_user: data.userProfile.primary_user,
-                goal: data.userProfile.goal,
-              });
-              setMode('editor');
-              triggerAutoSave();
-            }}
-          />
-        ) : mode === 'guided' ? (
+        {mode === 'guided' ? (
           <GuidedSetup
             vision={vision}
             userProfile={userProfile}

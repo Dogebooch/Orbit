@@ -11,6 +11,12 @@ import {
   Activity,
   Trash2,
   RotateCcw,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  Target,
+  AlertOctagon,
 } from 'lucide-react';
 
 interface SessionManagerProps {
@@ -43,6 +49,7 @@ export function SessionManager({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [showEducation, setShowEducation] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
@@ -140,6 +147,87 @@ export function SessionManager({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Why Sessions Matter - Education Panel */}
+          <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-700/50 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowEducation(!showEducation)}
+              className="w-full flex items-center justify-between p-4 hover:bg-purple-900/20 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-500/20 rounded-lg">
+                  <Info className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-purple-200">Why Sessions Matter</h3>
+                  <p className="text-xs text-purple-400">Learn how to prevent AI context pollution</p>
+                </div>
+              </div>
+              {showEducation ? (
+                <ChevronUp className="w-5 h-5 text-purple-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-purple-400" />
+              )}
+            </button>
+            
+            {showEducation && (
+              <div className="px-4 pb-4 space-y-4">
+                {/* Context Pollution Explanation */}
+                <div className="p-3 bg-primary-900/50 rounded-lg border border-primary-700/50">
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertOctagon className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-orange-300">What is Context Pollution?</p>
+                  </div>
+                  <p className="text-xs text-primary-300 leading-relaxed">
+                    AI models like Claude maintain conversation context. As conversations grow longer and cover 
+                    multiple features, the AI can mix contexts—applying styling decisions from Feature A to Feature B, 
+                    or forgetting constraints you established earlier. This leads to inconsistent code and subtle bugs.
+                  </p>
+                </div>
+
+                {/* One Session Per Feature - Key Rule */}
+                <div className="p-3 bg-blue-900/30 rounded-lg border-2 border-blue-500/50">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Target className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold text-blue-300 uppercase tracking-wide">
+                      Golden Rule: One Session Per Feature
+                    </p>
+                  </div>
+                  <p className="text-xs text-blue-200 leading-relaxed">
+                    Start new chat sessions for new features to avoid context overload. Each major feature 
+                    should have its own AI session. This keeps conversations focused and prevents the AI 
+                    from mixing contexts between unrelated features.
+                  </p>
+                </div>
+
+                {/* When to Start New Sessions */}
+                <div className="p-3 bg-primary-900/50 rounded-lg border border-primary-700/50">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Zap className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-yellow-300">When to Start a New Session</p>
+                  </div>
+                  <ul className="text-xs text-primary-300 space-y-1.5">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400 font-bold">1.</span>
+                      <span><strong className="text-primary-200">New Feature</strong> — Starting work on a different feature than the current session</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400 font-bold">2.</span>
+                      <span><strong className="text-primary-200">3+ Tasks</strong> — Session has accumulated 3 or more tasks (context getting crowded)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400 font-bold">3.</span>
+                      <span><strong className="text-primary-200">2+ Hours</strong> — Session is over 2 hours old (conversation has grown long)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400 font-bold">4.</span>
+                      <span><strong className="text-primary-200">Unrelated Work</strong> — Switching to debugging, refactoring, or other unrelated tasks</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Current Session */}
           {currentSession && (
             <div className="space-y-3">

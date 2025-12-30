@@ -8,7 +8,7 @@ import {
   AlertTriangle,
   Terminal,
   Key,
-  FolderCode,
+  Folder,
   ArrowRight,
   ExternalLink,
   Rocket,
@@ -61,7 +61,7 @@ const PREREQUISITES: PrerequisiteItem[] = [
     id: 'starter_template',
     label: 'Starter template selected',
     description: 'Choose a template or use Bolt.new to scaffold your project',
-    icon: FolderCode,
+    icon: Folder,
   },
 ];
 

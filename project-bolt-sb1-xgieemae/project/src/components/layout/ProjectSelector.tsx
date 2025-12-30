@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui';
-import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, Search, ListChecks, Code2, Rocket, ArrowLeft } from 'lucide-react';
+import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, Search, ListChecks, Code2, Rocket, RefreshCw, ArrowLeft, Package } from 'lucide-react';
 import { TemplateSelector } from './TemplateSelector';
 import { ProjectTemplate, getTemplateById } from '../../lib/projectTemplates';
 
@@ -16,11 +16,13 @@ interface Project {
 }
 
 interface StageProgress {
+  setup: boolean;
   foundation: boolean;
   research: boolean;
   strategy: boolean;
   workbench: boolean;
   testing: boolean;
+  maintenance: boolean;
 }
 
 interface ProjectSelectorProps {
@@ -41,11 +43,13 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [stageProgress, setStageProgress] = useState<StageProgress>({
+    setup: false,
     foundation: false,
     research: false,
     strategy: false,
     workbench: false,
     testing: false,
+    maintenance: false,
   });
 
   // Sync with external trigger for new project modal
@@ -71,12 +75,27 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
     if (!currentProject) return;
 
     const progress: StageProgress = {
+      setup: false,
       foundation: false,
       research: false,
       strategy: false,
       workbench: false,
       testing: false,
+      maintenance: false,
     };
+
+    // Check Setup completion (from settings)
+    const { data: setupData } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('user_id', user?.id)
+      .eq('key', 'setup_prerequisites')
+      .maybeSingle();
+
+    if (setupData?.value) {
+      const checkedItems = (setupData.value as { checkedItems?: Record<string, boolean> }).checkedItems || {};
+      progress.setup = Object.values(checkedItems).every(Boolean);
+    }
 
     // Check Foundation (Vision & User Profile)
     const { data: visionData } = await supabase
@@ -139,6 +158,21 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
       progress.testing = completed >= 5; // At least 50%
     }
 
+    // Check Maintenance (has reviews or feedback)
+    const { data: reviewsData } = await supabase
+      .from('maintenance_reviews')
+      .select('id')
+      .eq('project_id', currentProject.id)
+      .limit(1);
+
+    const { data: feedbackData } = await supabase
+      .from('user_feedback')
+      .select('id')
+      .eq('project_id', currentProject.id)
+      .limit(1);
+
+    progress.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
+
     setStageProgress(progress);
   };
 
@@ -170,7 +204,7 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
           user_id: user.id,
           name: newProjectName.trim(),
           description: newProjectDescription.trim(),
-          current_stage: 'vision',
+          current_stage: 'setup',
         })
         .select()
         .single();
@@ -301,15 +335,17 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
   }
 
   const completedStages = Object.values(stageProgress).filter(Boolean).length;
-  const totalStages = 5;
+  const totalStages = 7;
   const progressPercent = Math.round((completedStages / totalStages) * 100);
 
   const stages = [
+    { key: 'setup', id: 'setup', label: 'Setup', icon: Package, complete: stageProgress.setup },
     { key: 'foundation', id: 'vision', label: 'Foundation', icon: Lightbulb, complete: stageProgress.foundation },
     { key: 'research', id: 'research', label: 'Research', icon: Search, complete: stageProgress.research },
     { key: 'strategy', id: 'strategy', label: 'Strategy', icon: ListChecks, complete: stageProgress.strategy },
     { key: 'workbench', id: 'workbench', label: 'Workbench', icon: Code2, complete: stageProgress.workbench },
     { key: 'testing', id: 'testing', label: 'Testing', icon: Rocket, complete: stageProgress.testing },
+    { key: 'maintenance', id: 'maintenance', label: 'Maintenance', icon: RefreshCw, complete: stageProgress.maintenance },
   ];
 
   return (

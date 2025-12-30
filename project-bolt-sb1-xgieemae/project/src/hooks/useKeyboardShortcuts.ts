@@ -9,8 +9,8 @@ interface ShortcutHandlers {
   onCopyContext?: () => void;
 }
 
-// Updated stages: removed research, added setup at the beginning
-const STAGES = ['dashboard', 'setup', 'vision', 'strategy', 'workbench', 'promptlibrary', 'testing'];
+// Updated stages: removed research, added setup at the beginning, added maintenance at the end
+const STAGES = ['dashboard', 'setup', 'vision', 'strategy', 'workbench', 'promptlibrary', 'testing', 'maintenance'];
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -30,8 +30,8 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
     // Don't process other shortcuts when typing
     if (isInputFocused) return;
 
-    // Ctrl/Cmd + 0-6: Switch stages
-    if (isCtrlOrCmd && event.key >= '0' && event.key <= '6') {
+    // Ctrl/Cmd + 0-7: Switch stages
+    if (isCtrlOrCmd && event.key >= '0' && event.key <= '7') {
       event.preventDefault();
       const stageIndex = parseInt(event.key);
       if (stageIndex < STAGES.length && handlers.onStageChange) {
@@ -76,7 +76,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
 }
 
 export const KEYBOARD_SHORTCUTS = [
-  { keys: 'Ctrl + 0-6', description: 'Switch between stages' },
+  { keys: 'Ctrl + 0-7', description: 'Switch between stages' },
   { keys: 'Ctrl + N', description: 'Create new project' },
   { keys: 'Ctrl + S', description: 'Force save' },
   { keys: 'Ctrl + K', description: 'Command palette' },

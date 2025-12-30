@@ -1030,6 +1030,32 @@ ${outOfScope || '- _No items marked as out of scope_'}
                         </div>
                       </div>
 
+                      {/* JSON Parsing Workaround Warning */}
+                      <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h5 className="text-sm font-semibold text-amber-300 mb-2">Known Issue: JSON Parsing Error</h5>
+                            <p className="text-xs text-amber-200/80 mb-3">
+                              Claude Code may encounter a JSON parsing error when trying to parse the PRD file directly:
+                            </p>
+                            <pre className="bg-amber-950/50 border border-amber-800/50 rounded p-2 mb-3 overflow-x-auto">
+                              <code className="text-xs text-amber-200/70">taskmaster-ai:parse_prd (MCP) Error: Unterminated string in JSON at position 14000</code>
+                            </pre>
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-amber-300">Workaround:</p>
+                              <ol className="text-xs text-amber-200/80 space-y-1 list-decimal list-inside">
+                                <li>Use Cursor (or another AI coding tool) to generate initial tasks from your PRD</li>
+                                <li>Then switch back to Claude Code and continue with task implementation</li>
+                              </ol>
+                              <p className="text-xs text-amber-200/60 italic mt-2">
+                                This is a temporary limitation that may be resolved in future updates.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Tips */}
                       <div className="grid md:grid-cols-2 gap-3">
                         <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-lg p-3">

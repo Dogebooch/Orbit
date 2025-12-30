@@ -50,7 +50,7 @@ export function PromptLibraryStage() {
         user_id: user.id,
         title: 'Create Functional Requirements',
         content:
-          'I would like to create concise functional requirements for the following application:\n\n[DESCRIBE YOUR APP]\n\nBe sure to include:\n- App name\n- Tech stack\n- Core features\n- Database needs\n- API integrations\n- Design style\n- Things NOT to build\n\nOutput as markdown code.',
+          'I would like to create concise functional requirements for the following application:\n\n[DESCRIBE YOUR APP]\n\nBe sure to include:\n- App name\n- Tech stack\n- Core features\n- Database needs\n- API integrations\n- Design style\n- Things NOT to build\n- Ask it to research a comparable, existing app (if applicable)\n\nOutput as markdown code.',
         category: 'prd',
         is_favorite: true,
       },
@@ -58,7 +58,15 @@ export function PromptLibraryStage() {
         user_id: user.id,
         title: 'Generate PRD from Requirements',
         content:
-          'You are an expert technical product manager. Generate a detailed PRD based on these requirements:\n\n[PASTE REQUIREMENTS]\n\nInclude:\n1. Introduction & Overview\n2. Product Overview\n3. Goals and Objectives\n4. Target Audience\n5. Features and Requirements\n6. User Stories with Acceptance Criteria (use IDs like ST-101)\n7. Technical Requirements / Stack\n8. Design and User Interface\n\nPresent the final PRD in markdown format.',
+          'You are an expert technical product manager specializing in feature development and creating comprehensive product requirements documents (PRDs). Your task is to generate a detailed and well-structured PRD based on the following instructions:\n\n<prd_instructions>\n{{PRD_INSTRUCTIONS}}\n</prd_instructions>\n\nFollow these steps to create the PRD:\n\n1. Begin with a brief overview explaining the project and the purpose of the document.\n\n2. Use sentence case for all headings except for the title of the document, which should be in title case.\n\n3. Organize your PRD into the following sections:\n   a. Introduction\n   b. Product Overview\n   c. Goals and Objectives\n   d. Target Audience\n   e. Features and Requirements\n   f. User Stories and Acceptance Criteria\n   g. Technical Requirements / Stack\n   h. Design and User Interface\n\n4. For each section, provide detailed and relevant information based on the PRD instructions. Ensure that you:\n   - Use clear and concise language\n   - Provide specific details and metrics where required\n   - Maintain consistency throughout the document\n   - Address all points mentioned in each section\n\n5. When creating user stories and acceptance criteria:\n   - List ALL necessary user stories including primary, alternative, and edge-case scenarios\n   - Assign a unique requirement ID (e.g., ST-101) to each user story for direct traceability\n   - Include at least one user story specifically for secure access or authentication if the application requires user identification\n   - Include at least one user story specifically for Database modelling if the application requires a database\n   - Ensure no potential user interaction is omitted\n   - Make sure each user story is testable\n\n6. Format your PRD professionally:\n   - Use consistent styles\n   - Include numbered sections and subsections\n   - Use bullet points and tables where appropriate to improve readability\n   - Ensure proper spacing and alignment throughout the document\n\n7. Review your PRD to ensure all aspects of the project are covered comprehensively and that there are no contradictions or ambiguities.\n\nPresent your final PRD within <PRD> tags. Begin with the title of the document in title case, followed by each section with its corresponding content. Use appropriate subheadings within each section as needed.\n\nRemember to tailor the content to the specific project described in the PRD instructions, providing detailed and relevant information for each section based on the given context.',
+        category: 'prd',
+        is_favorite: true,
+      },
+      {
+        user_id: user.id,
+        title: 'Feature Specification Pattern',
+        content:
+          '## Feature Specification: [FEATURE_NAME]\n\n## User Story\nAs a [user type], I want to [action] so that [benefit].\n\n## Acceptance Criteria\n- [ ] [Specific testable requirement]\n- [ ] [Specific testable requirement]\n- [ ] [Specific testable requirement]',
         category: 'prd',
         is_favorite: true,
       },
@@ -221,6 +229,14 @@ export function PromptLibraryStage() {
         category: 'implementation',
         is_favorite: false,
       },
+      {
+        user_id: user.id,
+        title: 'Context-Aware Modifications Pattern',
+        content:
+          'Looking at the current [component/file], I need to:\n[Specific change 1]\n[Specific change 2]\n[Specific change 3]\n\nPlease modify the existing code while maintaining the current patterns and style.',
+        category: 'implementation',
+        is_favorite: true,
+      },
     ];
 
     const { data } = await supabase.from('prompts').insert(defaultPrompts).select();
@@ -267,19 +283,19 @@ export function PromptLibraryStage() {
   });
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col h-full">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-primary-100 flex items-center gap-3">
+        <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
           <BookMarked className="w-8 h-8 text-primary-400" />
           Prompt Library
         </h1>
-        <p className="text-primary-400 mt-2">
+        <p className="mt-2 text-primary-400">
           Field-tested prompts from the Vibe Coding and TaskMaster guides. Click to copy and paste into Claude Code, Copilot, or any AI assistant.
         </p>
       </div>
 
-      <div className="mb-6 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
-        <div className="flex items-start gap-3">
+      <div className="p-4 mb-6 rounded-lg border bg-amber-900/20 border-amber-700/50">
+        <div className="flex gap-3 items-start">
           <Lightbulb className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-amber-200/80">
             <strong className="text-amber-300">Pro Tip:</strong> Start with PRD prompts in the Strategy stage, then use TaskMaster prompts in the Workbench. The [BRACKETS] indicate where you should fill in your specific details.
@@ -292,9 +308,9 @@ export function PromptLibraryStage() {
           <h2 className="text-xl font-semibold text-primary-100">Your Prompts</h2>
         </div>
 
-        <div className="space-y-4 mb-6">
+        <div className="mb-6 space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-primary-400" />
+            <Search className="absolute left-3 top-1/2 w-5 h-5 transform -translate-y-1/2 text-primary-400" />
             <Input
               placeholder="Search prompts..."
               value={searchQuery}
@@ -303,7 +319,7 @@ export function PromptLibraryStage() {
             />
           </div>
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2">
             {categories.map((cat) => (
               <button
                 key={cat.value}
@@ -324,17 +340,17 @@ export function PromptLibraryStage() {
           {filteredPrompts.map((prompt) => (
             <div
               key={prompt.id}
-              className="p-4 bg-primary-800 rounded-lg hover:bg-primary-700 transition-colors"
+              className="p-4 rounded-lg transition-colors bg-primary-800 hover:bg-primary-700"
             >
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-medium text-primary-100 flex items-center gap-2">
+                <h3 className="flex gap-2 items-center font-medium text-primary-100">
                   {prompt.title}
                   {prompt.is_favorite && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
                 </h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => toggleFavorite(prompt.id, prompt.is_favorite)}
-                    className="text-primary-400 hover:text-yellow-400 transition-colors"
+                    className="transition-colors text-primary-400 hover:text-yellow-400"
                   >
                     <Star
                       className={`w-4 h-4 ${prompt.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`}
@@ -342,25 +358,25 @@ export function PromptLibraryStage() {
                   </button>
                   <button
                     onClick={() => copyPrompt(prompt.content, prompt.id)}
-                    className="text-primary-400 hover:text-primary-200 transition-colors"
+                    className="transition-colors text-primary-400 hover:text-primary-200"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-primary-400 whitespace-pre-line">{prompt.content}</p>
+              <p className="text-sm whitespace-pre-line text-primary-400">{prompt.content}</p>
               {copiedPrompt === prompt.id && (
-                <p className="text-xs text-green-400 mt-2">Copied to clipboard!</p>
+                <p className="mt-2 text-xs text-green-400">Copied to clipboard!</p>
               )}
             </div>
           ))}
         </div>
 
         {filteredPrompts.length === 0 && (
-          <div className="text-center py-12">
-            <BookMarked className="w-12 h-12 text-primary-600 mx-auto mb-3" />
-            <p className="text-primary-400 text-sm">No prompts found</p>
-            <p className="text-xs text-primary-500 mt-2">Create your first prompt or try a different filter</p>
+          <div className="py-12 text-center">
+            <BookMarked className="mx-auto mb-3 w-12 h-12 text-primary-600" />
+            <p className="text-sm text-primary-400">No prompts found</p>
+            <p className="mt-2 text-xs text-primary-500">Create your first prompt or try a different filter</p>
           </div>
         )}
       </Card>

@@ -23,11 +23,13 @@ interface Project {
 }
 
 export interface StageCompletion {
+  setup: boolean;
   vision: boolean;
   research: boolean;
   strategy: boolean;
   workbench: boolean;
   testing: boolean;
+  maintenance: boolean;
 }
 
 interface AppContextType {
@@ -45,11 +47,13 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const DEFAULT_STAGE_COMPLETION: StageCompletion = {
+  setup: false,
   vision: false,
   research: false,
   strategy: false,
   workbench: false,
   testing: false,
+  maintenance: false,
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -57,7 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user] = useState<User | null>(MOCK_USER);
   const [loading] = useState(false);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [currentStage, setCurrentStage] = useState('vision');
+  const [currentStage, setCurrentStage] = useState('setup');
   const [stageCompletion, setStageCompletion] = useState<StageCompletion>(DEFAULT_STAGE_COMPLETION);
 
   // Check stage completion status
@@ -68,14 +72,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const completion: StageCompletion = {
+      setup: false,
       vision: false,
       research: false,
       strategy: false,
       workbench: false,
       testing: false,
+      maintenance: false,
     };
 
     try {
+      // Check Setup completion - all prerequisites checked
+      const { data: setupData } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('user_id', user?.id)
+        .eq('key', 'setup_prerequisites')
+        .maybeSingle();
+
+      if (setupData?.value) {
+        const checkedItems = (setupData.value as { checkedItems?: Record<string, boolean> }).checkedItems || {};
+        completion.setup = Object.values(checkedItems).every(Boolean);
+      }
+
       // Check Vision stage - has problem and target_user defined
       const { data: visionData } = await supabase
         .from('visions')
@@ -122,6 +141,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         completion.testing = completedCount >= Math.ceil(tasksData.length / 2);
       }
 
+      // Check Maintenance stage - has at least one weekly review or user feedback
+      const { data: reviewsData } = await supabase
+        .from('maintenance_reviews')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .limit(1);
+
+      const { data: feedbackData } = await supabase
+        .from('user_feedback')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .limit(1);
+
+      completion.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
+
       setStageCompletion(completion);
     } catch (error) {
       console.error('Error checking stage completion:', error);
@@ -138,7 +172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // No-op for local use
     setCurrentProject(null);
-    setCurrentStage('vision');
+    setCurrentStage('setup');
     setStageCompletion(DEFAULT_STAGE_COMPLETION);
   };
 

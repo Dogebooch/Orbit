@@ -32,6 +32,8 @@ import { TaskMasterCommands } from '../workbench/TaskMasterCommands';
 import { TaskQuickActions } from '../workbench/TaskQuickActions';
 import { SessionIndicator } from '../workbench/SessionIndicator';
 import { SessionManager } from '../workbench/SessionManager';
+import { SessionOnboarding } from '../workbench/SessionOnboarding';
+import { WorkflowGuide } from '../workbench/WorkflowGuide';
 import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
 import {
   isSubtask,
@@ -546,6 +548,13 @@ Ready to implement the current task with this context in mind.
           <div className="flex-1 min-h-[500px]">
             <TerminalPanel />
           </div>
+
+          {/* Workflow Guide - Step-by-step development loop */}
+          <WorkflowGuide
+            onPromptSelect={handleTaskMasterCommand}
+            currentTaskNumber={currentTask ? currentTask.order_index + 1 : undefined}
+            currentTaskTitle={currentTask?.title}
+          />
 
           <Card>
             <div className="mb-4">
@@ -1136,6 +1145,11 @@ Ready to implement the current task with this context in mind.
         suggestedTaskId={currentTask?.id}
         suggestedSessionName={currentTask ? `${currentTask.title.substring(0, 30)}...` : undefined}
       />
+
+      {/* Session Onboarding for First-Time Users */}
+      {!currentSession && (
+        <SessionOnboarding onStartSession={() => setShowSessionManager(true)} />
+      )}
 
       {/* Session Warning Modal */}
       {sessionWarning && (

@@ -9,11 +9,12 @@ import { StrategyStage } from './components/stages/StrategyStage';
 import { WorkbenchStage } from './components/stages/WorkbenchStage';
 import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
 import { TestingStage } from './components/stages/TestingStage';
+import { MaintenanceStage } from './components/stages/MaintenanceStage';
 import { SettingsStage } from './components/stages/SettingsStage';
 import { DashboardStage } from './components/stages/DashboardStage';
 import { CommandPalette, CommandIcons } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { AlertCircle, LayoutDashboard, Package } from 'lucide-react';
+import { AlertCircle, LayoutDashboard, Package, RefreshCw } from 'lucide-react';
 
 function App() {
   const { currentProject, currentStage, setCurrentStage } = useApp();
@@ -52,6 +53,7 @@ function App() {
     { id: 'workbench', label: 'Go to Workbench', description: 'Build & Code', icon: CommandIcons.Code2, action: () => handleStageChange('workbench'), keywords: ['code', 'terminal'] },
     { id: 'promptlibrary', label: 'Go to Prompt Library', description: 'Saved Prompts', icon: CommandIcons.BookMarked, action: () => handleStageChange('promptlibrary'), keywords: ['prompts'] },
     { id: 'testing', label: 'Go to Testing', description: 'Ship & Deploy', icon: CommandIcons.Rocket, action: () => handleStageChange('testing'), keywords: ['deploy', 'ship'] },
+    { id: 'maintenance', label: 'Go to Maintenance', description: 'Reviews & Feedback', icon: RefreshCw, action: () => handleStageChange('maintenance'), keywords: ['maintenance', 'feedback', 'review', 'growth'] },
     { id: 'settings', label: 'Go to Settings', description: 'Configuration', icon: CommandIcons.Settings, action: () => handleStageChange('settings'), keywords: ['config'] },
     { id: 'new-project', label: 'Create New Project', description: 'Start a new project', icon: CommandIcons.FolderPlus, action: () => setShowNewProject(true), keywords: ['create', 'add'] },
   ];
@@ -87,6 +89,8 @@ function App() {
         return <PromptLibraryStage />;
       case 'testing':
         return <TestingStage />;
+      case 'maintenance':
+        return <MaintenanceStage />;
       case 'settings':
         return <SettingsStage />;
       default:

@@ -37,6 +37,7 @@ import {
   writeFilesViaWebSocket,
 } from '../../../utils/fileOutput';
 import { getWebSocketClient } from '../../../lib/websocket';
+import { writeAllConfigsViaWebSocket } from '../../../lib/configGenerator';
 
 type WizardStep = 'stack' | 'standards' | 'ai' | 'review';
 
@@ -245,6 +246,22 @@ export function ProjectFilesWizard({ geminiApiKey, onClose }: ProjectFilesWizard
 
       const allSuccess = results.every((r) => r.success);
       setWriteSuccess(allSuccess);
+
+      // Auto-generate TaskMaster config files after successfully writing project files
+      if (allSuccess && currentProject) {
+        try {
+          console.log('[ProjectFilesWizard] Auto-generating TaskMaster config files...');
+          writeAllConfigsViaWebSocket(
+            wsClient,
+            workingDirectory,
+            currentProject.name
+          );
+          console.log('[ProjectFilesWizard] TaskMaster config files generated successfully');
+        } catch (configError) {
+          // Log error but don't fail the entire operation
+          console.error('[ProjectFilesWizard] Failed to auto-generate config files:', configError);
+        }
+      }
 
       if (allSuccess) {
         setTimeout(() => setWriteSuccess(false), 3000);
