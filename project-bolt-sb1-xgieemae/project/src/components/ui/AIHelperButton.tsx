@@ -14,14 +14,7 @@ import {
 import { Button } from './Button';
 import { useTerminal } from '../../contexts/TerminalContext';
 import { getHelperPrompt, type PromptContext } from '../../lib/promptConfig';
-import type { ContentType } from '../../lib/gemini';
-
-// Global function to trigger Jarvis with a prompt
-let jarvisPromptHandler: ((prompt: string, context?: PromptContext) => void) | null = null;
-
-export function setJarvisPromptHandler(handler: (prompt: string, context?: PromptContext) => void) {
-  jarvisPromptHandler = handler;
-}
+import type { ContentType, EvaluationResult } from '../../lib/gemini';
 
 interface AIHelperButtonProps {
   content: string;
@@ -86,7 +79,7 @@ export function AIHelperButton({
 
   const handleAction = async (action: AIAction) => {
     if (!isReady || !wsClient) {
-      setState((prev) => ({ ...prev, error: 'Backend not connected or Jarvis not ready.' }));
+      setState((prev) => ({ ...prev, error: 'Backend not connected or AI assistant not ready.' }));
       return;
     }
     if (!content.trim()) {
@@ -113,25 +106,17 @@ export function AIHelperButton({
       else if (contentType === 'userProfile') context = 'userProfile';
       else if (contentType === 'prd' || contentType === 'feature') context = 'strategy';
 
-      // Send prompt to Jarvis
-      if (jarvisPromptHandler) {
-        jarvisPromptHandler(prompt, context);
-        // Close popover - response will appear in Jarvis panel
-        setIsOpen(false);
-        setState((prev) => ({ ...prev, loading: false }));
-      } else {
-        // Fallback: send directly via WebSocket
-        const requestId = `ai-helper-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        wsClient.send({
-          type: 'gemini:send',
-          prompt,
-          requestId,
-        });
-        
-        // For now, just close and let user see response in Jarvis
-        setIsOpen(false);
-        setState((prev) => ({ ...prev, loading: false }));
-      }
+      // Send directly via WebSocket
+      const requestId = `ai-helper-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      wsClient.send({
+        type: 'gemini:send',
+        prompt,
+        requestId,
+      });
+      
+      // Close popover - response will appear in terminal or be handled by backend
+      setIsOpen(false);
+      setState((prev) => ({ ...prev, loading: false }));
     } catch (error) {
       console.error('AI action failed:', error);
       setState((prev) => ({
@@ -206,7 +191,7 @@ export function AIHelperButton({
                   <p className="text-sm text-amber-200 mb-2">
                     {!isBackendConnected 
                       ? 'Backend server not connected. Please start the backend server.'
-                      : 'Jarvis is initializing. Please wait...'}
+                      : 'AI assistant is initializing. Please wait...'}
                   </p>
                 </div>
               </div>
@@ -276,7 +261,7 @@ export function AIHelperButton({
           )}
 
           {/* Results */}
-          {isConfigured && !state.loading && (state.suggestions || state.evaluation || state.improvedContent || state.error) && (
+          {!state.loading && (state.suggestions || state.evaluation || state.improvedContent || state.error) && (
             <div className="border-t border-primary-700 p-4 max-h-64 overflow-y-auto">
               {/* Error */}
               {state.error && (

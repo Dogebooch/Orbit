@@ -5,7 +5,37 @@
 import { localDb } from './localStorage';
 
 // Export localDb as 'supabase' so all existing imports continue to work
-export const supabase = localDb;
+// We also add a mock auth object to satisfy the AuthForm component
+const authMock = {
+  signUp: async ({ email }: { email: string }) => {
+    console.log('[Mock Auth] SignUp', email);
+    return { data: { user: { id: 'mock-user-id', email } }, error: null };
+  },
+  signInWithPassword: async ({ email }: { email: string }) => {
+    console.log('[Mock Auth] SignIn', email);
+    return { data: { user: { id: 'mock-user-id', email } }, error: null };
+  },
+  signOut: async () => {
+    console.log('[Mock Auth] SignOut');
+    return { error: null };
+  },
+  getSession: async () => {
+    return { data: { session: { user: { id: 'mock-user-id', email: 'mock@example.com' } } }, error: null };
+  },
+  onAuthStateChange: (callback: (event: string, session: any) => void) => {
+    // Immediately trigger signed in state
+    callback('SIGNED_IN', { user: { id: 'mock-user-id' } });
+    return { data: { subscription: { unsubscribe: () => {} } } };
+  },
+  getUser: async () => {
+    return { data: { user: { id: 'mock-user-id', email: 'mock@example.com' } }, error: null };
+  }
+};
+
+export const supabase = {
+  ...localDb,
+  auth: authMock
+};
 
 export type Database = {
   public: {

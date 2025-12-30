@@ -339,6 +339,61 @@ function handleClientMessage(message: ClientMessage, ws: WebSocket): void {
       }
       break;
 
+    case 'project:clearFolder':
+      try {
+        if (!config.workingDirectory) {
+          throw new Error('Working directory not set');
+        }
+
+        console.log(`[Project] Clearing folder: ${config.workingDirectory}`);
+
+        // Check if directory exists
+        if (!fs.existsSync(config.workingDirectory)) {
+          ws.send(JSON.stringify({
+            type: 'project:clearFolderResult',
+            success: true,
+          } satisfies ServerMessage));
+          break;
+        }
+
+        // Get all files and directories in the working directory
+        const entries = fs.readdirSync(config.workingDirectory, { withFileTypes: true });
+
+        // Delete each entry (files and directories)
+        for (const entry of entries) {
+          const entryPath = path.join(config.workingDirectory, entry.name);
+          
+          try {
+            if (entry.isDirectory()) {
+              // Recursively delete directory
+              fs.rmSync(entryPath, { recursive: true, force: true });
+            } else {
+              // Delete file
+              fs.unlinkSync(entryPath);
+            }
+          } catch (error) {
+            console.warn(`[Project] Failed to delete ${entryPath}:`, error);
+            // Continue with other entries even if one fails
+          }
+        }
+
+        console.log(`[Project] Successfully cleared folder: ${config.workingDirectory}`);
+        
+        ws.send(JSON.stringify({
+          type: 'project:clearFolderResult',
+          success: true,
+        } satisfies ServerMessage));
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[Project] Failed to clear folder:', errorMessage);
+        ws.send(JSON.stringify({
+          type: 'project:clearFolderResult',
+          success: false,
+          error: errorMessage,
+        } satisfies ServerMessage));
+      }
+      break;
+
     default:
       console.warn('[WebSocket] Unknown message type:', (message as { type: string }).type);
   }
@@ -374,4 +429,3 @@ process.on('SIGTERM', () => {
   server.close();
   process.exit(0);
 });
-

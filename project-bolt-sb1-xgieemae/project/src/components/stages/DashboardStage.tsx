@@ -5,7 +5,6 @@ import { Card, Button } from '../ui';
 import {
   LayoutDashboard,
   Lightbulb,
-  Search,
   ListChecks,
   Code2,
   Rocket,
@@ -90,24 +89,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
       details: `${visionComplete}/${visionTotal} fields completed`,
     });
 
-    // 2. Check Research Stage
-    const { data: researchApps } = await supabase
-      .from('research_apps')
-      .select('id')
-      .eq('project_id', currentProject.id);
-
-    const researchCount = researchApps?.length ?? 0;
-    stageStatuses.push({
-      id: 'research',
-      name: 'Research',
-      description: 'Market & Discovery',
-      icon: Search,
-      complete: researchCount > 0,
-      progress: researchCount > 0 ? 100 : 0,
-      details: researchCount > 0 ? `${researchCount} apps analyzed` : 'No research yet',
-    });
-
-    // 3. Check Strategy Stage
+    // 2. Check Strategy Stage
     const { data: prdData } = await supabase
       .from('prds')
       .select('content')
@@ -136,7 +118,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     const allTasks = taskData ?? [];
     setTasks(allTasks);
     
-    const completedTasks = allTasks.filter(t => t.status === 'completed').length;
+    const completedTasks = allTasks.filter((t: any) => t.status === 'completed').length;
     const totalTasks = allTasks.length;
     const workbenchProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
@@ -184,9 +166,8 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
     if (incompleteStage) {
       const actions: Record<string, { label: string; description: string }> = {
         vision: { label: 'Complete your Foundation', description: 'Define your vision and target user to guide AI assistants' },
-        research: { label: 'Research competitors', description: 'Analyze similar apps to find opportunities' },
         strategy: { label: 'Write your PRD', description: 'Create a Product Requirements Document' },
-        workbench: { label: 'Work on tasks', description: allTasks.find(t => t.status === 'in_progress')?.title || 'Start implementing features' },
+        workbench: { label: 'Work on tasks', description: allTasks.find((t: any) => t.status === 'in_progress')?.title || 'Start implementing features' },
         testing: { label: 'Validate your app', description: 'Complete the testing checklist before shipping' },
       };
       setNextAction({
@@ -206,7 +187,7 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
 
   const currentTask = tasks.find(t => t.status === 'in_progress');
   const pendingTasks = tasks.filter(t => t.status === 'pending').slice(0, 3);
-  const recentlyCompleted = tasks.filter(t => t.status === 'completed').slice(-3);
+  // const recentlyCompleted = tasks.filter(t => t.status === 'completed').slice(-3);
 
   if (loading) {
     return (
@@ -406,6 +387,16 @@ export function DashboardStage({ onNavigate }: DashboardStageProps) {
             Testing Checklist
           </Button>
         </div>
+      </Card>
+
+      {/* When to Restart Info */}
+      <Card className="bg-primary-800/30">
+        <h3 className="text-sm font-medium text-primary-300 mb-2">When to Restart Phases</h3>
+        <ul className="text-xs text-primary-500 space-y-1">
+          <li>• <strong>Pivot (new user/problem)</strong> → Restart at Foundation</li>
+          <li>• <strong>Change tech stack</strong> → Restart at Strategy</li>
+          <li>• <strong>Add major features</strong> → Add to PRD, re-parse tasks</li>
+        </ul>
       </Card>
     </div>
   );

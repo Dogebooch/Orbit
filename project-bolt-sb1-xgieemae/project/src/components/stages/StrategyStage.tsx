@@ -24,14 +24,12 @@ import {
   Folder,
   FileText,
   Download,
-  Eye,
   Package,
   Settings,
   Zap,
+  BookMarked,
 } from 'lucide-react';
 import {
-  generatePRDPrompt,
-  generateBoltMetaPrompt,
   generateTaskmasterConfig,
   generateMCPConfig,
   generatePRDPlaceholder,
@@ -70,13 +68,7 @@ interface Feature {
   acceptanceCriteria: string[];
 }
 
-interface TechStack {
-  frontend: string;
-  backend: string;
-  database: string;
-  deployment: string;
-  additionalTools: string;
-}
+type TechStack = string;
 
 interface ParsedTask {
   id: string;
@@ -87,77 +79,24 @@ interface ParsedTask {
   selected: boolean;
 }
 
-type StrategyStep = 'tech_stack' | 'features' | 'out_of_scope' | 'prepare_launch';
+type StrategyStep = 'features' | 'out_of_scope' | 'prepare_launch';
 
 const STEPS: { id: StrategyStep; label: string; description: string }[] = [
-  { id: 'tech_stack', label: 'Tech Stack', description: 'Choose your technology stack' },
   { id: 'features', label: 'Features', description: 'Define your MVP features' },
   { id: 'out_of_scope', label: 'Out of Scope', description: 'What NOT to build' },
   { id: 'prepare_launch', label: 'Prepare for Launch', description: 'Generate files and prompts' },
 ];
 
-const TECH_OPTIONS = {
-  frontend: [
-    { value: 'react-vite', label: 'React + TypeScript + Vite', description: 'Fast, modern React setup with Vite bundler' },
-    { value: 'nextjs', label: 'Next.js', description: 'Full-stack React with SSR and API routes' },
-    { value: 'vue', label: 'Vue 3', description: 'Progressive JavaScript framework' },
-    { value: 'vanilla', label: 'Vanilla JS', description: 'Plain JavaScript, no framework' },
-  ],
-  backend: [
-    { value: 'none', label: 'None (Client-only)', description: 'Frontend-only app, no backend needed' },
-    { value: 'supabase', label: 'Supabase', description: 'Backend-as-a-service with Postgres' },
-    { value: 'nodejs', label: 'Node.js + Express', description: 'Traditional Node.js server' },
-    { value: 'edge', label: 'Edge Functions', description: 'Serverless functions at the edge' },
-  ],
-  database: [
-    { value: 'none', label: 'None', description: 'No database needed for this project' },
-    { value: 'supabase-postgres', label: 'Supabase (Postgres)', description: 'Hosted PostgreSQL with realtime' },
-    { value: 'sqlite-better', label: 'SQLite (better-sqlite3)', description: 'Fast native SQLite for Node.js/Electron' },
-    { value: 'sqlite-sqljs', label: 'SQLite (sql.js)', description: 'SQLite compiled to WebAssembly for browsers' },
-    { value: 'firebase', label: 'Firebase', description: 'NoSQL document database' },
-  ],
-  deployment: [
-    { value: 'vercel', label: 'Vercel', description: 'Best for Next.js and React apps' },
-    { value: 'netlify', label: 'Netlify', description: 'Great for static sites and serverless' },
-    { value: 'railway', label: 'Railway', description: 'Good for full-stack apps with databases' },
-    { value: 'electron', label: 'Electron', description: 'Desktop app with native OS integration' },
-    { value: 'local', label: 'Local only', description: 'Development only, no deployment' },
-  ],
-};
 
 export function StrategyStage() {
   const { currentProject, setCurrentStage } = useApp();
-  const [currentStep, setCurrentStep] = useState<StrategyStep>('tech_stack');
+  const [currentStep, setCurrentStep] = useState<StrategyStep>('features');
   const [vision, setVision] = useState<VisionData>({ problem: '', target_user: '', success_metrics: '', target_level: 'mvp' });
   const [userProfile, setUserProfile] = useState<UserProfileData>({ primary_user: '', goal: '' });
   const [saving, setSaving] = useState(false);
   
   // Tech stack state
-  const [techStack, setTechStack] = useState<TechStack>({
-    frontend: 'react-vite',
-    backend: 'supabase',
-    database: 'supabase-postgres',
-    deployment: 'vercel',
-    additionalTools: '',
-  });
-  
-  // "Started in Bolt" checkbox state
-  const [startedInBolt, setStartedInBolt] = useState(false);
-  
-  // Handle "Started in Bolt" checkbox change
-  const handleBoltCheckboxChange = (checked: boolean) => {
-    setStartedInBolt(checked);
-    if (checked) {
-      // Auto-populate with Bolt defaults
-      setTechStack({
-        frontend: 'react-vite',
-        backend: 'none',
-        database: 'none',
-        deployment: 'local',
-        additionalTools: 'TailwindCSS, Shadcn UI',
-      });
-    }
-  };
+  const [techStack, setTechStack] = useState<TechStack>('');
   
   // Features state
   const [features, setFeatures] = useState<Feature[]>([
@@ -171,7 +110,7 @@ export function StrategyStage() {
   // Prepare for Launch state
   const [copied, setCopied] = useState<string | null>(null);
   const [showQuickStart, setShowQuickStart] = useState(true);
-  const [previewContent, setPreviewContent] = useState<{ title: string; content: string } | null>(null);
+  const [downloadedFiles, setDownloadedFiles] = useState<string[]>([]);
   
   // PRD state
   const [prdContent, setPrdContent] = useState('');
@@ -290,10 +229,6 @@ export function StrategyStage() {
       return lines.join('\n');
     };
 
-    const getTechLabel = (category: keyof typeof TECH_OPTIONS, value: string) => {
-      return TECH_OPTIONS[category].find(o => o.value === value)?.label || value;
-    };
-
     return `# Product Requirements Document: ${currentProject?.name || 'Project'}
 
 ## Project Overview
@@ -309,11 +244,7 @@ ${userProfile.goal || '_Define in Foundation tab_'}
 
 ## Technical Stack
 
-- **Frontend:** ${getTechLabel('frontend', techStack.frontend)}
-- **Backend:** ${getTechLabel('backend', techStack.backend)}
-- **Database:** ${getTechLabel('database', techStack.database)}
-- **Deployment:** ${getTechLabel('deployment', techStack.deployment)}
-${techStack.additionalTools ? `- **Additional Tools:** ${techStack.additionalTools}` : ''}
+${techStack || '_Define your tech stack below_'}
 
 ## Core Features
 
@@ -402,11 +333,6 @@ ${outOfScope || '- _No items marked as out of scope_'}
   // Check if we have minimum required data
   const hasRequiredData = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
 
-  const copyToClipboard = async (text: string, id: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  };
 
   // Navigation
   const currentStepIndex = STEPS.findIndex(s => s.id === currentStep);
@@ -495,68 +421,23 @@ ${outOfScope || '- _No items marked as out of scope_'}
 
       {/* Step Content */}
       <Card className="min-h-[400px]">
-        {/* Step 1: Tech Stack */}
-        {currentStep === 'tech_stack' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="mb-2 text-xl font-semibold text-primary-100">Technical Stack</h2>
-              <p className="text-sm text-primary-400">
-                Choose your technology stack. These choices affect how AI generates code and what patterns it uses.
-              </p>
-            </div>
-
-            {/* "Started in Bolt" checkbox */}
-            <div className="flex items-center gap-2 p-3 bg-primary-800/50 rounded-lg border border-primary-700">
-              <input
-                type="checkbox"
-                id="started-in-bolt"
-                checked={startedInBolt}
-                onChange={(e) => handleBoltCheckboxChange(e.target.checked)}
-                className="w-4 h-4 rounded border-primary-600 bg-primary-900 text-primary-500 focus:ring-2 focus:ring-primary-500"
-              />
-              <label htmlFor="started-in-bolt" className="text-sm text-primary-200 cursor-pointer">
-                Started in Bolt.new
-              </label>
-              <span className="text-xs text-primary-400 ml-2">
-                (Auto-populates recommended defaults for Bolt projects)
-              </span>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {(Object.keys(TECH_OPTIONS) as Array<keyof typeof TECH_OPTIONS>).map((category) => (
-                <div key={category}>
-                  <label className="block mb-2 text-sm font-medium capitalize text-primary-300">
-                    {category === 'additionalTools' ? 'Additional Tools' : category}
-                  </label>
-                  {category === 'additionalTools' ? (
-                    <Input
-                      value={techStack.additionalTools}
-                      onChange={(e) => setTechStack({ ...techStack, additionalTools: e.target.value })}
-                      placeholder="e.g., TailwindCSS, Zod, React Query"
-                      className="bg-primary-800"
-                    />
-                  ) : (
-                    <select
-                      value={techStack[category as keyof TechStack]}
-                      onChange={(e) => setTechStack({ ...techStack, [category]: e.target.value })}
-                      className="w-full bg-primary-800 border border-primary-600 rounded-lg px-4 py-2.5 text-primary-100"
-                    >
-                      {TECH_OPTIONS[category].map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label} - {option.description}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Features */}
+        {/* Step 1: Features */}
         {currentStep === 'features' && (
           <div className="space-y-6">
+            <div>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Tech Stack</h2>
+              <p className="text-sm text-primary-400 mb-3">
+                Describe your technology stack (e.g., React + Vite, Next.js, Supabase, etc.)
+              </p>
+              <Textarea
+                value={techStack}
+                onChange={(e) => setTechStack(e.target.value)}
+                placeholder="e.g., React + TypeScript + Vite, Supabase, TailwindCSS, Shadcn UI"
+                rows={3}
+                className="bg-primary-800"
+              />
+            </div>
+
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="mb-2 text-xl font-semibold text-primary-100">Features</h2>
@@ -780,27 +661,42 @@ ${outOfScope || '- _No items marked as out of scope_'}
               </button>
 
               {showQuickStart && (
-                <div className="p-4 space-y-3 bg-primary-800/30 animate-fade-in">
-                  <div className="grid gap-3 text-center md:grid-cols-5">
-                    <div className="p-3 rounded-lg bg-primary-900/50">
-                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">1</div>
-                      <p className="text-xs text-primary-300">Copy PRD Prompt → Paste in Claude</p>
+                <div className="p-4 bg-primary-800/30 animate-fade-in">
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center flex-shrink-0">1</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Go to Prompt Library → Find "PRD Generator Prompt"</p>
+                        <p className="text-xs text-primary-400">Copy and paste into Claude.ai or ChatGPT</p>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-primary-900/50">
-                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">2</div>
-                      <p className="text-xs text-primary-300">Copy Bolt Prompt → Paste in Claude</p>
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center flex-shrink-0">2</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Save AI's response as <code className="px-1 bg-primary-800 rounded">scripts/prd.txt</code></p>
+                        <p className="text-xs text-primary-400">This becomes TaskMaster's input</p>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-primary-900/50">
-                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">3</div>
-                      <p className="text-xs text-primary-300">Paste generated prompt in Bolt.new</p>
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-cyan-600 text-white text-xs flex items-center justify-center flex-shrink-0">3</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Go to Prompt Library → Find "Bolt.new Prompt Generator"</p>
+                        <p className="text-xs text-primary-400">Copy and paste into Claude to get optimized Bolt.new prompt</p>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-primary-900/50">
-                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-cyan-300 rounded-full bg-cyan-600/30">4</div>
-                      <p className="text-xs text-primary-300">Download project locally</p>
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-cyan-600 text-white text-xs flex items-center justify-center flex-shrink-0">4</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Paste Claude's output into Bolt.new</p>
+                        <p className="text-xs text-primary-400">Download the generated project</p>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-primary-900/50">
-                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-cyan-300 rounded-full bg-cyan-600/30">5</div>
-                      <p className="text-xs text-primary-300">Use TaskMaster + Copilot</p>
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center flex-shrink-0">5</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Download config files → Place in project</p>
+                        <p className="text-xs text-primary-400">Then run <code className="px-1 bg-primary-800 rounded">claude</code> in terminal</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -812,364 +708,146 @@ ${outOfScope || '- _No items marked as out of scope_'}
               <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
                 <Sparkles className="w-5 h-5 text-purple-400" />
                 AI Prompts
-                <span className="ml-2 text-xs font-normal text-primary-400">Copy & paste into ChatGPT or Claude</span>
+                <span className="ml-2 text-xs font-normal text-primary-400">Find prompts in the Prompt Library</span>
               </h3>
 
               <div className="grid gap-4 md:grid-cols-2">
-                {/* PRD Generator Prompt */}
+                {/* PRD Prompts Link */}
                 <div className="p-4 rounded-xl border bg-purple-900/20 border-purple-700/50">
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h4 className="flex gap-2 items-center font-medium text-purple-200">
                         <FileText className="w-4 h-4 text-purple-400" />
-                        PRD Generator Prompt
+                        PRD Generator Prompts
                       </h4>
                       <p className="mt-1 text-xs text-purple-300/70">
-                        Generates a detailed PRD for TaskMaster
+                        Find PRD creation prompts in the Prompt Library
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: 'PRD Generator Prompt', 
-                          content: generatePRDPrompt(projectContext) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                        disabled={!hasRequiredData}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => copyToClipboard(generatePRDPrompt(projectContext), 'prd-prompt')}
-                        variant="secondary"
-                        size="sm"
-                        disabled={!hasRequiredData}
-                      >
-                        {copied === 'prd-prompt' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </Button>
-                    </div>
                   </div>
-                  <p className="text-xs text-purple-200/60">
-                    Save the AI's output as <code className="px-1 rounded bg-purple-900/50">scripts/prd.txt</code>
+                  <p className="text-xs text-purple-200/60 mb-3">
+                    All PRD prompts are available in the Prompt Library, including the full PRD generator template.
                   </p>
+                  <Button
+                    onClick={() => {
+                      setCurrentStage('promptlibrary');
+                      // Store category filter in sessionStorage to auto-filter when library opens
+                      sessionStorage.setItem('promptLibraryFilter', 'prd');
+                    }}
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <BookMarked className="mr-2 w-4 h-4" />
+                    View PRD Prompts in Library
+                  </Button>
                 </div>
 
-                {/* Bolt Meta-Prompt */}
+                {/* Bolt Prompts Link */}
                 <div className="p-4 rounded-xl border bg-cyan-900/20 border-cyan-700/50">
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h4 className="flex gap-2 items-center font-medium text-cyan-200">
                         <Rocket className="w-4 h-4 text-cyan-400" />
-                        Bolt Prompt Generator
+                        Bolt.new Prompts
                       </h4>
                       <p className="mt-1 text-xs text-cyan-300/70">
-                        Creates an optimized prompt for Bolt.new
+                        Find Bolt prompt generators in the Prompt Library
                       </p>
                     </div>
-                    <div className="flex gap-1">
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs text-cyan-200/60">
+                      All Bolt.new prompts are available in the Prompt Library.
+                    </p>
+                    <div className="flex gap-2">
                       <Button
-                        onClick={() => setPreviewContent({ 
-                          title: 'Bolt Prompt Generator', 
-                          content: generateBoltMetaPrompt(projectContext) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                        disabled={!hasRequiredData}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => copyToClipboard(generateBoltMetaPrompt(projectContext), 'bolt-meta')}
+                        onClick={() => {
+                          setCurrentStage('promptlibrary');
+                          sessionStorage.setItem('promptLibraryFilter', 'bolt');
+                        }}
                         variant="secondary"
                         size="sm"
-                        disabled={!hasRequiredData}
+                        className="flex-1"
                       >
-                        {copied === 'bolt-meta' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        <BookMarked className="mr-2 w-4 h-4" />
+                        View Bolt Prompts
+                      </Button>
+                      <Button
+                        onClick={() => window.open('https://bolt.new', '_blank')}
+                        size="sm"
+                        className="text-xs bg-cyan-600 hover:bg-cyan-500"
+                      >
+                        <ExternalLink className="mr-1 w-3 h-3" />
+                        Open Bolt.new
                       </Button>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <Button
-                      onClick={() => window.open('https://bolt.new', '_blank')}
-                      size="sm"
-                      className="text-xs bg-cyan-600 hover:bg-cyan-500"
-                    >
-                      <ExternalLink className="mr-1 w-3 h-3" />
-                      Open Bolt.new
-                    </Button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Section B: Project Files */}
+            {/* Section B: Download Project Files */}
             <div className="space-y-4">
               <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
                 <FileText className="w-5 h-5 text-green-400" />
                 Project Files
-                <span className="ml-2 text-xs font-normal text-primary-400">Download for your project</span>
-              </h3>
-
-              <div className="p-4 rounded-xl border bg-primary-800/30 border-primary-700">
-                <div className="grid gap-3 md:grid-cols-3">
-                  {/* CLAUDE.md */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <Sparkles className="w-4 h-4 text-purple-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">CLAUDE.md</span>
-                        <p className="text-xs text-primary-500">Project root</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={async () => {
-                          if (currentProject) {
-                            const data = await fetchProjectData(currentProject.id);
-                            if (data) {
-                              setPreviewContent({ title: 'CLAUDE.md', content: generateClaudeMd(data) });
-                            }
-                          }
-                        }}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          if (currentProject) {
-                            const data = await fetchProjectData(currentProject.id);
-                            if (data) {
-                              downloadFile(generateClaudeMd(data), 'CLAUDE.md');
-                            }
-                          }
-                        }}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* 0_vision.md */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <FileText className="w-4 h-4 text-amber-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">0_vision.md</span>
-                        <p className="text-xs text-primary-500">Project root</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: '0_vision.md', 
-                          content: generateVisionMarkdown(projectContext.vision, projectContext.projectName) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => downloadFile(
-                          generateVisionMarkdown(projectContext.vision, projectContext.projectName), 
-                          '0_vision.md'
-                        )}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* 1_user_profile.md */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <FileText className="w-4 h-4 text-blue-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">1_user_profile.md</span>
-                        <p className="text-xs text-primary-500">Project root</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: '1_user_profile.md', 
-                          content: generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => downloadFile(
-                          generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName), 
-                          '1_user_profile.md'
-                        )}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Section C: TaskMaster Setup Files */}
-            <div className="space-y-4">
-              <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
-                <Settings className="w-5 h-5 text-cyan-400" />
-                TaskMaster Setup
-                <span className="ml-2 text-xs font-normal text-primary-400">For local development with Claude Code</span>
+                <span className="ml-2 text-xs font-normal text-primary-400">Download all files for your project</span>
               </h3>
 
               <div className="p-4 rounded-xl border bg-cyan-900/20 border-cyan-700/50">
-                <div className="grid gap-3 mb-4 md:grid-cols-2">
-                  {/* .taskmaster/config.json */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <Terminal className="w-4 h-4 text-cyan-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">.taskmaster/config.json</span>
-                        <p className="text-xs text-primary-500">.taskmaster/ folder</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: '.taskmaster/config.json', 
-                          content: generateTaskmasterConfig(projectContext.projectName) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => downloadJSON(
-                          generateTaskmasterConfig(projectContext.projectName), 
-                          'config.json'
-                        )}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* .mcp.json */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">.mcp.json</span>
-                        <p className="text-xs text-primary-500">Project root</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: '.mcp.json', 
-                          content: generateMCPConfig() 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => downloadJSON(generateMCPConfig(), '.mcp.json')}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* scripts/prd.txt template */}
-                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
-                    <div className="flex gap-2 items-center">
-                      <ListChecks className="w-4 h-4 text-green-400" />
-                      <div>
-                        <span className="text-sm text-primary-200">scripts/prd.txt</span>
-                        <p className="text-xs text-primary-500">scripts/ folder (template)</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => setPreviewContent({ 
-                          title: 'scripts/prd.txt (template)', 
-                          content: generatePRDPlaceholder(projectContext.projectName) 
-                        })}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => downloadFile(
-                          generatePRDPlaceholder(projectContext.projectName), 
-                          'prd.txt'
-                        )}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Download All as ZIP */}
-                  <div className="flex justify-center items-center p-3 bg-gradient-to-r rounded-lg border from-purple-900/30 to-cyan-900/30 border-primary-600/50">
-                    <Button
-                      onClick={async () => {
-                        const JSZip = (await import('jszip')).default;
-                        const zip = new JSZip();
-                        
-                        // Add files
-                        if (currentProject) {
-                          const projectData = await fetchProjectData(currentProject.id);
-                          if (projectData) {
-                            zip.file('CLAUDE.md', generateClaudeMd(projectData));
-                          }
+                <div className="flex justify-center items-center mb-4">
+                  <Button
+                    onClick={async () => {
+                      const JSZip = (await import('jszip')).default;
+                      const zip = new JSZip();
+                      
+                      // Add files
+                      if (currentProject) {
+                        const projectData = await fetchProjectData(currentProject.id);
+                        if (projectData) {
+                          zip.file('CLAUDE.md', generateClaudeMd(projectData));
                         }
-                        zip.file('0_vision.md', generateVisionMarkdown(projectContext.vision, projectContext.projectName));
-                        zip.file('1_user_profile.md', generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName));
-                        
-                        // TaskMaster files
-                        const taskmaster = zip.folder('.taskmaster');
-                        taskmaster?.file('config.json', generateTaskmasterConfig(projectContext.projectName));
-                        zip.file('.mcp.json', generateMCPConfig());
-                        
-                        const scripts = zip.folder('scripts');
-                        scripts?.file('prd.txt', generatePRDPlaceholder(projectContext.projectName));
-                        
-                        // Generate and download
-                        const blob = await zip.generateAsync({ type: 'blob' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${projectContext.projectName.replace(/\s+/g, '-').toLowerCase()}-launch-files.zip`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500"
-                    >
-                      <Package className="mr-2 w-4 h-4" />
-                      Download All as ZIP
-                    </Button>
-                  </div>
+                      }
+                      zip.file('0_vision.md', generateVisionMarkdown(projectContext.vision, projectContext.projectName));
+                      zip.file('1_user_profile.md', generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName));
+                      
+                      // TaskMaster files
+                      const taskmaster = zip.folder('.taskmaster');
+                      taskmaster?.file('config.json', generateTaskmasterConfig(projectContext.projectName));
+                      zip.file('.mcp.json', generateMCPConfig());
+                      
+                      const scripts = zip.folder('scripts');
+                      scripts?.file('prd.txt', generatePRDPlaceholder(projectContext.projectName));
+                      
+                      // Generate and download
+                      const blob = await zip.generateAsync({ type: 'blob' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${projectContext.projectName.replace(/\s+/g, '-').toLowerCase()}-launch-files.zip`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      
+                      // Track downloaded files for success message
+                      setDownloadedFiles(['CLAUDE.md', '0_vision.md', '1_user_profile.md', '.taskmaster/config.json', '.mcp.json', 'scripts/prd.txt']);
+                    }}
+                    className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500"
+                  >
+                    <Package className="mr-2 w-4 h-4" />
+                    Download All as ZIP
+                  </Button>
                 </div>
+
+                {/* Post-Download Success Message */}
+                {downloadedFiles.length > 0 && (
+                  <div className="mt-4 p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
+                    <p className="text-sm text-green-300 font-medium mb-1">Files Downloaded!</p>
+                    <p className="text-xs text-green-400">
+                      Extract the ZIP and place files in your project root. Then restart Claude Code.
+                    </p>
+                  </div>
+                )}
 
                 {/* Folder Structure Reference */}
                 <div className="p-3 mt-4 rounded-lg bg-primary-900/50">
@@ -1194,38 +872,6 @@ ${outOfScope || '- _No items marked as out of scope_'}
               </div>
             </div>
 
-            {/* Preview Modal */}
-            {previewContent && (
-              <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black/70">
-                <div className="bg-primary-900 border border-primary-700 rounded-xl max-w-3xl w-full max-h-[80vh] flex flex-col">
-                  <div className="flex justify-between items-center p-4 border-b border-primary-700">
-                    <h3 className="font-semibold text-primary-100">{previewContent.title}</h3>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => copyToClipboard(previewContent.content, 'preview')}
-                        variant="secondary"
-                        size="sm"
-                      >
-                        {copied === 'preview' ? <Check className="mr-1 w-4 h-4" /> : <Copy className="mr-1 w-4 h-4" />}
-                        {copied === 'preview' ? 'Copied!' : 'Copy'}
-                      </Button>
-                      <Button
-                        onClick={() => setPreviewContent(null)}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="overflow-auto flex-1 p-4">
-                    <pre className="font-mono text-sm whitespace-pre-wrap text-primary-200">
-                      {previewContent.content}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </Card>

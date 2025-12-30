@@ -185,12 +185,12 @@ export function TerminalPanel() {
 
         <ConnectionStatus status={connectionStatus} onTestConnection={testConnection} />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
           {isBackendConnected ? (
             // Real terminal with xterm.js when backend is connected
-            <div className="flex-1 p-2">
+            <div className="flex-1 p-2 min-h-0 overflow-hidden">
               <XTerminal
-                ref={xtermRef as React.Ref<HTMLDivElement>}
+                ref={xtermRef}
                 onData={handleTerminalData}
                 onResize={handleTerminalResize}
                 fontSize={preferences.fontSize}

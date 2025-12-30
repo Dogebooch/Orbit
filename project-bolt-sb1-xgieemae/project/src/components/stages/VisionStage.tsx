@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Button, Card, StageTips, useFirstVisit } from '../ui';
-import { Lightbulb, Download, Wand2, FileEdit, CheckCircle, FileText, ChevronDown, Sparkles } from 'lucide-react';
-import { GuidedSetup } from './vision/GuidedSetup';
+import { Button, Card, useFirstVisit } from '../ui';
+import { Lightbulb, Download, CheckCircle, ChevronRight } from 'lucide-react';
 import { MarkdownEditor } from './vision/MarkdownEditor';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown } from '../../utils/markdownUtils';
-import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
+
+type ActiveDocument = 'vision' | 'profile' | 'metrics';
 
 interface VisionData {
   problem: string;
@@ -27,11 +27,8 @@ interface UserProfileData {
   competitor_notes: string;
 }
 
-type EditMode = 'guided' | 'editor';
-
 export function VisionStage() {
   const { currentProject, setCurrentStage } = useApp();
-  const [mode, setMode] = useState<EditMode>('guided');
   const [vision, setVision] = useState<VisionData>({
     problem: '',
     target_user: '',
@@ -52,7 +49,7 @@ export function VisionStage() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | undefined>();
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [activeDocument, setActiveDocument] = useState<ActiveDocument>('vision');
 
   useEffect(() => {
     if (currentProject) {
@@ -85,9 +82,6 @@ export function VisionStage() {
         why_software: visionData.why_software || '',
         target_level: visionData.target_level || 'mvp',
       });
-      if (visionData.problem || visionData.target_user) {
-        setMode('editor');
-      }
     }
 
     const { data: profileData } = await supabase
@@ -218,7 +212,6 @@ export function VisionStage() {
     downloadVision();
     setTimeout(() => downloadUserProfile(), 100);
     setTimeout(() => downloadSuccessMetrics(), 200);
-    setShowDownloadMenu(false);
   };
 
   const handleContinue = async () => {
@@ -230,13 +223,26 @@ export function VisionStage() {
     setCurrentStage('strategy');
   };
 
-  const handleGuidedComplete = () => {
-    setMode('editor');
-    saveData(true);
-  };
-
   const isComplete = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
   const isFirstVisit = useFirstVisit('vision');
+
+  const handleNextDocument = () => {
+    const documentOrder: ActiveDocument[] = ['vision', 'profile', 'metrics'];
+    const currentIndex = documentOrder.indexOf(activeDocument);
+    const nextIndex = (currentIndex + 1) % documentOrder.length;
+    setActiveDocument(documentOrder[nextIndex]);
+  };
+
+  const getNextDocumentLabel = (): string => {
+    switch (activeDocument) {
+      case 'vision':
+        return 'Next: 1_user_profile.md';
+      case 'profile':
+        return 'Next: 2_success_metrics.md';
+      case 'metrics':
+        return 'Back to: 0_vision.md';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -259,128 +265,39 @@ export function VisionStage() {
         )}
       </div>
 
-      <StageTips
-        stage="vision"
-        isComplete={!!isComplete}
-        isFirstVisit={isFirstVisit}
-        maxTips={2}
-      />
-
       <Card>
         <div className="flex items-center justify-between mb-6 -mx-6 -mt-6 px-6 py-4 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={mode === 'guided' ? 'primary' : 'ghost'}
-              onClick={() => setMode('guided')}
-            >
-              <Wand2 className="w-4 h-4 mr-2" />
-              Guided
-            </Button>
-            <Button
-              variant={mode === 'editor' ? 'primary' : 'ghost'}
-              onClick={() => setMode('editor')}
-            >
-              <FileEdit className="w-4 h-4 mr-2" />
-              Editor
-            </Button>
-          </div>
-
           <div className="flex gap-3">
-            <div className="relative">
-              <Button
-                variant="ghost"
-                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download
-                <ChevronDown className="w-4 h-4 ml-1" />
-              </Button>
-              {showDownloadMenu && (
-                <div className="absolute right-0 top-full mt-2 bg-primary-800 border border-primary-600 rounded-lg shadow-xl z-10 min-w-[200px]">
-                  <button
-                    onClick={downloadAll}
-                    className="w-full px-4 py-3 text-left hover:bg-primary-700 transition-colors border-b border-primary-700 flex items-center gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-primary-400" />
-                    <div>
-                      <span className="text-primary-100 font-medium">Download All</span>
-                      <span className="block text-xs text-primary-400">3 files</span>
-                    </div>
-                  </button>
-                  <button
-                    onClick={async () => { 
-                      if (currentProject) {
-                        await generateAndDownloadClaudeMd(currentProject.id);
-                      }
-                      setShowDownloadMenu(false); 
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-primary-700 transition-colors border-b border-primary-700 flex items-start gap-3 group"
-                  >
-                    <Sparkles className="w-4 h-4 text-purple-400 mt-0.5" />
-                    <div>
-                      <span className="text-primary-100 font-medium">CLAUDE.md</span>
-                      <span className="block text-xs text-primary-400 mb-1">AI context file for Claude Code</span>
-                      <span className="block text-xs text-purple-300/70 group-hover:text-purple-300">
-                        Place in project root. Tells Claude your stack, conventions & current task.
-                      </span>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => { downloadVision(); setShowDownloadMenu(false); }}
-                    className="w-full px-4 py-2 text-left hover:bg-primary-700 transition-colors flex items-center gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-amber-400" />
-                    <span className="text-primary-200 text-sm">0_vision.md</span>
-                  </button>
-                  <button
-                    onClick={() => { downloadUserProfile(); setShowDownloadMenu(false); }}
-                    className="w-full px-4 py-2 text-left hover:bg-primary-700 transition-colors flex items-center gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    <span className="text-primary-200 text-sm">1_user_profile.md</span>
-                  </button>
-                  <button
-                    onClick={() => { downloadSuccessMetrics(); setShowDownloadMenu(false); }}
-                    className="w-full px-4 py-2 text-left hover:bg-primary-700 transition-colors rounded-b-lg flex items-center gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-green-400" />
-                    <span className="text-primary-200 text-sm">2_success_metrics.md</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            {mode === 'editor' && (
-              <Button onClick={handleContinue} disabled={!isComplete}>
-                Continue to Strategy
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              onClick={downloadAll}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download Foundation Files
+            </Button>
+            <Button onClick={handleContinue} disabled={!isComplete}>
+              Continue to Strategy
+            </Button>
           </div>
         </div>
 
-        {mode === 'guided' ? (
-          <GuidedSetup
-            vision={vision}
-            userProfile={userProfile}
-            onVisionChange={handleVisionChange}
-            onUserProfileChange={handleUserProfileChange}
-            onComplete={handleGuidedComplete}
-          />
-        ) : (
-          <MarkdownEditor
-            vision={vision}
-            userProfile={userProfile}
-            onVisionChange={handleVisionChange}
-            onUserProfileChange={handleUserProfileChange}
-            lastSaved={lastSaved}
-          />
-        )}
+        <MarkdownEditor
+          vision={vision}
+          userProfile={userProfile}
+          onVisionChange={handleVisionChange}
+          onUserProfileChange={handleUserProfileChange}
+          lastSaved={lastSaved}
+          activeDocument={activeDocument}
+          onActiveDocumentChange={setActiveDocument}
+        />
       </Card>
 
-      {mode === 'editor' && !isComplete && (
-        <div className="flex items-center justify-center p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg">
-          <p className="text-sm text-yellow-300">
-            Complete the required fields (Problem, Target User, Primary User, Goal) to proceed to Strategy
-          </p>
+      {!isComplete && (
+        <div className="flex items-center justify-center p-4 bg-primary-800/50 border border-primary-700 rounded-lg">
+          <Button onClick={handleNextDocument} variant="primary">
+            {getNextDocumentLabel()}
+            <ChevronRight className="w-4 h-4 ml-2" />
+          </Button>
         </div>
       )}
     </div>

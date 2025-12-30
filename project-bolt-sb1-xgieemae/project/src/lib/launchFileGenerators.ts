@@ -39,13 +39,7 @@ export interface Feature {
   acceptanceCriteria: string[];
 }
 
-export interface TechStack {
-  frontend: string;
-  backend: string;
-  database: string;
-  deployment: string;
-  additionalTools?: string;
-}
+export type TechStack = string;
 
 export interface ProjectContext {
   projectName: string;
@@ -54,44 +48,6 @@ export interface ProjectContext {
   features: Feature[];
   techStack: TechStack;
   outOfScope: string;
-}
-
-// ============================================================================
-// Tech Stack Labels
-// ============================================================================
-
-const TECH_LABELS: Record<string, Record<string, string>> = {
-  frontend: {
-    'react-vite': 'React + TypeScript + Vite',
-    'nextjs': 'Next.js 15 + TypeScript',
-    'vue': 'Vue 3 + TypeScript',
-    'vanilla': 'Vanilla JavaScript',
-  },
-  backend: {
-    'none': 'None (Client-only)',
-    'supabase': 'Supabase (Backend-as-a-Service)',
-    'nodejs': 'Node.js + Express',
-    'edge': 'Edge Functions (Serverless)',
-  },
-  database: {
-    'none': 'None',
-    'supabase-postgres': 'Supabase PostgreSQL',
-    'sqlite': 'SQLite',
-    'sqlite-better': 'SQLite with better-sqlite3 (Node.js/Electron)',
-    'sqlite-sqljs': 'SQLite with sql.js (Browser/WebAssembly)',
-    'firebase': 'Firebase Firestore',
-  },
-  deployment: {
-    'vercel': 'Vercel',
-    'netlify': 'Netlify',
-    'railway': 'Railway',
-    'electron': 'Electron Desktop App',
-    'local': 'Local Development Only',
-  },
-};
-
-function getTechLabel(category: string, value: string): string {
-  return TECH_LABELS[category]?.[value] || value;
 }
 
 // ============================================================================
@@ -154,11 +110,7 @@ ${vision.success_metrics || 'Not specified'}
 - **Pain Points/Frustrations:** ${userProfile.frustrations || 'Not specified'}
 
 ## Technical Stack
-- **Frontend:** ${getTechLabel('frontend', techStack.frontend)}
-- **Backend:** ${getTechLabel('backend', techStack.backend)}
-- **Database:** ${getTechLabel('database', techStack.database)}
-- **Deployment:** ${getTechLabel('deployment', techStack.deployment)}
-${techStack.additionalTools ? `- **Additional Tools:** ${techStack.additionalTools}` : ''}
+${techStack || 'Not specified'}
 
 ## Features & Requirements
 ${featuresText || 'No features defined yet'}
@@ -268,11 +220,7 @@ export function generateBoltMetaPrompt(context: ProjectContext): string {
 - **Pain Points:** ${userProfile.frustrations || 'Not specified'}
 
 ### Technical Stack Requirements
-- **Frontend:** ${getTechLabel('frontend', techStack.frontend)}
-- **Backend:** ${getTechLabel('backend', techStack.backend)}
-- **Database:** ${getTechLabel('database', techStack.database)}
-- **Deployment Target:** ${getTechLabel('deployment', techStack.deployment)}
-${techStack.additionalTools ? `- **Additional Tools/Libraries:** ${techStack.additionalTools}` : ''}
+${techStack || 'Not specified'}
 
 ### MVP Features (Priority Order)
 ${mvpFeatures.length > 0 ? mvpFeatures.map((f, i) => formatFeature(f, i)).join('\n\n') : 'No features defined'}

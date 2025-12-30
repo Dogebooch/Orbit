@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
+import { useTerminal } from '../../contexts/TerminalContext';
 import { supabase } from '../../lib/supabase';
 import { Button, Card, Input } from '../ui';
+import { Toast } from '../ui/Toast';
 import {
   Plus,
   Check,
@@ -29,11 +31,14 @@ interface Task {
 
 export function TaskBoard() {
   const { currentProject } = useApp();
+  const { taskMasterTasks } = useTerminal();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [completedTaskTitle, setCompletedTaskTitle] = useState<string>('');
 
   useEffect(() => {
     if (currentProject) {
@@ -85,6 +90,15 @@ export function TaskBoard() {
       .eq('id', taskId);
 
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
+
+    // Show toast notification when task is completed
+    if (newStatus === 'completed') {
+      const completedTask = tasks.find((t) => t.id === taskId);
+      if (completedTask) {
+        setCompletedTaskTitle(completedTask.title);
+        setShowToast(true);
+      }
+    }
   };
 
   const setActiveTask = async (taskId: string) => {
@@ -270,6 +284,11 @@ export function TaskBoard() {
             <h2 className="text-xl font-semibold text-primary-100">Task Queue</h2>
             <p className="text-sm text-primary-400 mt-1">
               {pendingTasks.length} pending tasks
+              {taskMasterTasks.length > 0 && (
+                <span className="ml-2 text-primary-300">
+                  • {taskMasterTasks.length} from TaskMaster
+                </span>
+              )}
             </p>
           </div>
           <Button onClick={() => setShowNewTask(true)} variant="secondary">
@@ -452,6 +471,13 @@ export function TaskBoard() {
           </div>
         )}
       </Card>
+
+      {showToast && (
+        <Toast
+          taskTitle={completedTaskTitle}
+          onDismiss={() => setShowToast(false)}
+        />
+      )}
     </div>
   );
 }

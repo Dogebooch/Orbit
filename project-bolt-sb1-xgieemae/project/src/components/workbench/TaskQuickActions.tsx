@@ -23,8 +23,6 @@ export function TaskQuickActions({
   onViewDetails,
   isExpanded = false,
 }: TaskQuickActionsProps) {
-  const taskNumber = task.order_index + 1;
-
   const handleImplement = (e: React.MouseEvent) => {
     e.stopPropagation();
     onImplement(task.id, task.title);
@@ -40,59 +38,35 @@ export function TaskQuickActions({
     onViewDetails(task.id);
   };
 
-  if (isExpanded) {
-    return (
-      <div className="flex gap-2 mt-3 pt-3 border-t border-primary-700/50">
-        <Button
-          onClick={handleImplement}
-          variant="primary"
-          className="flex-1 text-xs py-1.5"
-        >
-          <Play className="w-3 h-3 mr-1" />
-          Implement
-        </Button>
-        <Button
-          onClick={handleBreakDown}
-          variant="secondary"
-          className="flex-1 text-xs py-1.5"
-        >
-          <Sparkles className="w-3 h-3 mr-1" />
-          Break Down
-        </Button>
-        <Button
-          onClick={handleViewDetails}
-          variant="ghost"
-          className="text-xs py-1.5 px-2"
-        >
-          <Eye className="w-3 h-3" />
-        </Button>
-      </div>
-    );
+  if (!isExpanded) {
+    return null;
   }
 
   return (
-    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-      <button
+    <div className="flex gap-2 pt-3 mt-3 border-t border-primary-700/50">
+      <Button
         onClick={handleImplement}
-        className="p-1.5 rounded hover:bg-primary-700/50 transition-colors"
-        title="Implement task"
+        variant="primary"
+        className="flex-1 text-xs py-1.5"
       >
-        <Play className="w-3.5 h-3.5 text-primary-400 hover:text-green-400" />
-      </button>
-      <button
+        <Play className="mr-1 w-3 h-3" />
+        Implement
+      </Button>
+      <Button
         onClick={handleBreakDown}
-        className="p-1.5 rounded hover:bg-primary-700/50 transition-colors"
-        title="Break down task"
+        variant="secondary"
+        className="flex-1 text-xs py-1.5"
       >
-        <Sparkles className="w-3.5 h-3.5 text-primary-400 hover:text-purple-400" />
-      </button>
-      <button
+        <Sparkles className="mr-1 w-3 h-3" />
+        Break Down
+      </Button>
+      <Button
         onClick={handleViewDetails}
-        className="p-1.5 rounded hover:bg-primary-700/50 transition-colors"
-        title="View details"
+        variant="ghost"
+        className="text-xs py-1.5 px-2"
       >
-        <Eye className="w-3.5 h-3.5 text-primary-400 hover:text-blue-400" />
-      </button>
+        <Eye className="w-3 h-3" />
+      </Button>
     </div>
   );
 }

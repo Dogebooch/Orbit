@@ -335,6 +335,11 @@ export function markdownToUserProfile(markdown: string): Partial<UserProfileData
     profile.time_constraints = timeConstraintsMatch[1].trim().replace(/^_Not yet defined_$/, '');
   }
 
+  const competitorNotesMatch = markdown.match(/## Competitor Research Notes\s*\n([\s\S]*?)(?=\n## |$)/);
+  if (competitorNotesMatch) {
+    profile.competitor_notes = competitorNotesMatch[1].trim().replace(/^_Not yet defined_$/, '');
+  }
+
   return profile;
 }
 

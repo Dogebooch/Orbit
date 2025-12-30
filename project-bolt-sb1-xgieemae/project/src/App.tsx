@@ -1,27 +1,27 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useApp } from './contexts/AppContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ProjectSelector } from './components/layout/ProjectSelector';
+import { PipelineProgress } from './components/layout/PipelineProgress';
 import { SetupStage } from './components/stages/SetupStage';
 import { VisionStage } from './components/stages/VisionStage';
 import { StrategyStage } from './components/stages/StrategyStage';
 import { WorkbenchStage } from './components/stages/WorkbenchStage';
 import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
 import { TestingStage } from './components/stages/TestingStage';
-import { MaintenanceStage } from './components/stages/MaintenanceStage';
 import { SettingsStage } from './components/stages/SettingsStage';
 import { DashboardStage } from './components/stages/DashboardStage';
 import { CommandPalette, CommandIcons } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { AlertCircle, LayoutDashboard, Package, RefreshCw } from 'lucide-react';
+import { AlertCircle, LayoutDashboard, Package } from 'lucide-react';
 
 function App() {
   const { currentProject, currentStage, setCurrentStage } = useApp();
   const [localStage, setLocalStage] = useState(currentStage);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
-  const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
+  // const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
 
   // Sync localStage when currentStage changes from context (e.g., "Continue to Strategy" buttons)
   useEffect(() => {
@@ -53,7 +53,6 @@ function App() {
     { id: 'workbench', label: 'Go to Workbench', description: 'Build & Code', icon: CommandIcons.Code2, action: () => handleStageChange('workbench'), keywords: ['code', 'terminal'] },
     { id: 'promptlibrary', label: 'Go to Prompt Library', description: 'Saved Prompts', icon: CommandIcons.BookMarked, action: () => handleStageChange('promptlibrary'), keywords: ['prompts'] },
     { id: 'testing', label: 'Go to Testing', description: 'Ship & Deploy', icon: CommandIcons.Rocket, action: () => handleStageChange('testing'), keywords: ['deploy', 'ship'] },
-    { id: 'maintenance', label: 'Go to Maintenance', description: 'Reviews & Feedback', icon: RefreshCw, action: () => handleStageChange('maintenance'), keywords: ['maintenance', 'feedback', 'review', 'growth'] },
     { id: 'settings', label: 'Go to Settings', description: 'Configuration', icon: CommandIcons.Settings, action: () => handleStageChange('settings'), keywords: ['config'] },
     { id: 'new-project', label: 'Create New Project', description: 'Start a new project', icon: CommandIcons.FolderPlus, action: () => setShowNewProject(true), keywords: ['create', 'add'] },
   ];
@@ -89,8 +88,6 @@ function App() {
         return <PromptLibraryStage />;
       case 'testing':
         return <TestingStage />;
-      case 'maintenance':
-        return <MaintenanceStage />;
       case 'settings':
         return <SettingsStage />;
       default:
@@ -110,6 +107,8 @@ function App() {
             showNewProjectModal={showNewProject}
             onNewProjectModalClose={() => setShowNewProject(false)}
           />
+
+          {currentProject && <PipelineProgress />}
 
           <main className="flex-1 overflow-y-auto p-8">
             {renderStage()}

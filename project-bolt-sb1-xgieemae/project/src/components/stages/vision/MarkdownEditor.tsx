@@ -20,7 +20,7 @@ interface UserProfileData {
   technical_comfort: string;
   persona_name: string;
   persona_role: string;
-  competitor_notes?: string;
+  competitor_notes: string;
 }
 
 interface MarkdownEditorProps {
@@ -29,6 +29,8 @@ interface MarkdownEditorProps {
   onVisionChange: (vision: VisionData) => void;
   onUserProfileChange: (profile: UserProfileData) => void;
   lastSaved?: Date;
+  activeDocument?: ActiveDocument;
+  onActiveDocumentChange?: (doc: ActiveDocument) => void;
 }
 
 type ActiveDocument = 'vision' | 'profile' | 'metrics';
@@ -39,8 +41,22 @@ export function MarkdownEditor({
   onVisionChange,
   onUserProfileChange,
   lastSaved,
+  activeDocument,
+  onActiveDocumentChange,
 }: MarkdownEditorProps) {
-  const [activeDoc, setActiveDoc] = useState<ActiveDocument>('vision');
+  const [activeDoc, setActiveDoc] = useState<ActiveDocument>(activeDocument || 'vision');
+  
+  // Sync with parent-controlled activeDocument
+  useEffect(() => {
+    if (activeDocument !== undefined && activeDocument !== activeDoc) {
+      setActiveDoc(activeDocument);
+    }
+  }, [activeDocument]);
+  
+  const handleSetActiveDoc = (doc: ActiveDocument) => {
+    setActiveDoc(doc);
+    onActiveDocumentChange?.(doc);
+  };
   const [visionMarkdown, setVisionMarkdown] = useState('');
   const [profileMarkdown, setProfileMarkdown] = useState('');
   const [metricsMarkdown, setMetricsMarkdown] = useState('');
@@ -165,27 +181,85 @@ export function MarkdownEditor({
     handleMarkdownChange(improvedContent);
   };
 
+  const getPlaceholder = (): string => {
+    if (activeDoc === 'vision') {
+      return `# Vision
+
+## Problem Statement
+What specific problem are you solving? Include who has this problem and what makes it painful. Be as specific as possible - include who has this problem and what makes it painful.
+
+Example: Small business owners spend 15+ minutes per invoice because they have to manually enter client details, calculate totals, and format documents in Word before emailing as PDFs.
+
+## Target User
+Who exactly will use this software? Define your target user with enough detail that you could find them in real life. Include their role, experience level, and current situation.
+
+Example: Solo consultants and freelancers who bill 5-20 clients monthly. They're not accounting experts, work from laptops, and get frustrated with bloated software that requires tutorials.
+
+## Why Software?
+Why does this need to be custom software? Be honest - could this be solved with a spreadsheet, existing tool, or manual process?
+
+Example: Spreadsheets require manual formatting and client email lookup. Existing tools like FreshBooks are too complex for quick invoicing. Custom software can save 10+ minutes per invoice through templates and client auto-fill.
+
+## Target Level
+Choose your target: MVP (Minimum Viable Product) - Minimally viable for real users to test. Core features work reliably.`;
+    } else if (activeDoc === 'profile') {
+      return `# User Profile
+
+## Primary User
+Create your primary user persona and define their goal. Give your target user a name and identity, then define what success looks like for them. Focus on the outcome they want to achieve.
+
+Example: Sarah, a freelance graphic designer who bills 10-15 clients per month and prefers quick, simple tools. Her goal: Get paid faster by sending professional invoices immediately after completing work.
+
+## Context (Optional)
+When and where will users use this? e.g., Right after finishing a client project, usually on a laptop, often between meetings...
+
+## Frustrations (Optional)
+What frustrates them about current solutions? e.g., Too many steps, requires learning accounting concepts, templates look unprofessional...
+
+## Technical Comfort (Optional)
+Low - Needs simple, guided interfaces
+Medium - Comfortable with standard apps
+High - Can handle advanced features
+
+## Competitor Notes (Optional)
+Notes from researching similar apps. What do they do well? What do users complain about?`;
+    } else {
+      return `# Success Metrics
+
+## How will you know it's working?
+Define specific, measurable outcomes. These become your acceptance criteria and help you know when you're done.
+
+Example:
+- 90% of users complete their first invoice in under 2 minutes
+- Users can complete the full workflow without instructions
+- Works on both mobile and desktop browsers
+- Zero crashes during demo with realistic data
+
+Make metrics specific and measurable. Include at least one usability metric and one technical metric.`;
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between -mx-6 px-6 py-3 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
         <div className="flex gap-2">
           <Button
             variant={activeDoc === 'vision' ? 'primary' : 'ghost'}
-            onClick={() => setActiveDoc('vision')}
+            onClick={() => handleSetActiveDoc('vision')}
           >
             <FileText className="w-4 h-4 mr-2 text-amber-400" />
             0_vision.md
           </Button>
           <Button
             variant={activeDoc === 'profile' ? 'primary' : 'ghost'}
-            onClick={() => setActiveDoc('profile')}
+            onClick={() => handleSetActiveDoc('profile')}
           >
             <FileText className="w-4 h-4 mr-2 text-blue-400" />
             1_user_profile.md
           </Button>
           <Button
             variant={activeDoc === 'metrics' ? 'primary' : 'ghost'}
-            onClick={() => setActiveDoc('metrics')}
+            onClick={() => handleSetActiveDoc('metrics')}
           >
             <FileText className="w-4 h-4 mr-2 text-green-400" />
             2_success_metrics.md
@@ -225,15 +299,10 @@ export function MarkdownEditor({
         <textarea
           value={currentMarkdown}
           onChange={(e) => handleMarkdownChange(e.target.value)}
-          className="flex-1 w-full p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 overflow-auto"
+          placeholder={currentMarkdown.length === 0 ? getPlaceholder() : ''}
+          className="flex-1 w-full p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 overflow-auto placeholder-primary-600"
           spellCheck={false}
         />
-      </div>
-
-      <div className="flex items-start gap-2 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
-        <div className="text-blue-300 text-sm">
-          <strong>Tip:</strong> These files are designed for AI-assisted development. Place them in your project root for Claude Code and Copilot to reference during development.
-        </div>
       </div>
     </div>
   );

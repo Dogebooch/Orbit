@@ -62,14 +62,24 @@ export class WebSocketClient {
         this.ws = null;
         
         if (!this.intentionalClose) {
-          this.onStatusChange('disconnected');
+          // Code 1006 = abnormal closure (server not running or connection refused)
+          // Code 1000 = normal closure
+          // Set to error if abnormal closure, otherwise disconnected
+          if (event.code === 1006) {
+            this.onStatusChange('error');
+          } else {
+            this.onStatusChange('disconnected');
+          }
           this.scheduleReconnect();
         }
       };
 
       this.ws.onerror = (error) => {
         console.error('[WebSocket] Error:', error);
-        this.onStatusChange('error');
+        // Set error status immediately when connection fails
+        if (!this.intentionalClose) {
+          this.onStatusChange('error');
+        }
       };
     } catch (error) {
       console.error('[WebSocket] Failed to create connection:', error);
@@ -166,4 +176,3 @@ export function disconnectWebSocket(): void {
     clientInstance = null;
   }
 }
-

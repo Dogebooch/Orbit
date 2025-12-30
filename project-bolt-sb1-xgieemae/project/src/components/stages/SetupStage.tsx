@@ -46,6 +46,14 @@ const PREREQUISITES: PrerequisiteItem[] = [
     helpLink: 'https://console.anthropic.com/',
     helpText: 'Get your API key from console.anthropic.com',
   },
+  {
+    id: 'scaffolded_project',
+    label: 'Project scaffolded with Bolt.new or CLI',
+    description: 'You need a working codebase before using AI tools',
+    icon: Rocket,
+    helpLink: 'https://bolt.new',
+    helpText: 'Open Bolt.new to create your starter project',
+  },
 ];
 
 export function SetupStage() {
@@ -54,6 +62,7 @@ export function SetupStage() {
     nodejs: false,
     claude_cli: false,
     api_key: false,
+    scaffolded_project: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -130,42 +139,42 @@ export function SetupStage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-400" />
+      <div className="flex justify-center items-center h-64">
+        <div className="w-8 h-8 rounded-full border-b-2 animate-spin border-primary-400" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="mx-auto space-y-8 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-primary-100 flex items-center gap-3">
+        <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
           <Rocket className="w-8 h-8 text-primary-400" />
           Setup: Prerequisites
         </h1>
-        <p className="text-primary-400 mt-2">
+        <p className="mt-2 text-primary-400">
           Before you start building, make sure you have these essentials ready.
         </p>
       </div>
 
       {/* Critical Warning */}
-      <div className="bg-red-900/30 border-2 border-red-600/50 rounded-xl p-6">
-        <div className="flex items-start gap-4">
+      <div className="p-6 rounded-xl border-2 bg-red-900/30 border-red-600/50">
+        <div className="flex gap-4 items-start">
           <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-lg font-semibold text-red-300 mb-2">
+            <h3 className="mb-2 text-lg font-semibold text-red-300">
               Don't Start from an Empty Codebase!
             </h3>
-            <p className="text-red-200/80 text-sm mb-3">
+            <p className="mb-3 text-sm text-red-200/80">
               AI coding tools work best when you already have a scaffolded project with:
             </p>
-            <ul className="text-sm text-red-200/70 space-y-1 ml-4">
+            <ul className="ml-4 space-y-1 text-sm text-red-200/70">
               <li>• package.json with dependencies</li>
               <li>• Framework setup (Next.js, Vite, etc.)</li>
               <li>• TypeScript configuration</li>
               <li>• ESLint and TailwindCSS configured</li>
             </ul>
-            <p className="text-red-200/80 text-sm mt-3">
+            <p className="mt-3 text-sm text-red-200/80">
               Use a CLI scaffolding tool or <strong className="text-red-300">Bolt.new</strong> to create your starter template first.
             </p>
           </div>
@@ -173,21 +182,21 @@ export function SetupStage() {
       </div>
 
       {/* Progress */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1 h-2 bg-primary-800 rounded-full overflow-hidden">
+      <div className="flex gap-4 items-center">
+        <div className="overflow-hidden flex-1 h-2 rounded-full bg-primary-800">
           <div
-            className="h-full bg-gradient-to-r from-primary-500 to-green-500 transition-all duration-500"
+            className="h-full bg-gradient-to-r to-green-500 transition-all duration-500 from-primary-500"
             style={{ width: `${(completedCount / PREREQUISITES.length) * 100}%` }}
           />
         </div>
-        <span className="text-sm text-primary-400 font-medium">
+        <span className="text-sm font-medium text-primary-400">
           {completedCount}/{PREREQUISITES.length} complete
         </span>
       </div>
 
       {/* Prerequisites Checklist */}
       <Card>
-        <h2 className="text-xl font-semibold text-primary-100 mb-6">Prerequisites Checklist</h2>
+        <h2 className="mb-6 text-xl font-semibold text-primary-100">Prerequisites Checklist</h2>
         <div className="space-y-4">
           {PREREQUISITES.map((item) => {
             const Icon = item.icon;
@@ -211,27 +220,27 @@ export function SetupStage() {
                   )}
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="flex items-center gap-3">
+                  <div className="flex gap-3 items-center">
                     <Icon className={`w-5 h-5 ${isChecked ? 'text-green-400' : 'text-primary-400'}`} />
                     <span className={`font-medium ${isChecked ? 'text-green-300' : 'text-primary-100'}`}>
                       {item.label}
                     </span>
                   </div>
-                  <p className="text-sm text-primary-400 mt-1 ml-8">{item.description}</p>
+                  <p className="mt-1 ml-8 text-sm text-primary-400">{item.description}</p>
                   {item.helpText && (
-                    <p className="text-xs text-primary-500 mt-2 ml-8">
+                    <p className="mt-2 ml-8 text-xs text-primary-500">
                       {item.helpLink ? (
                         <a
                           href={item.helpLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary-400 hover:text-primary-300 underline"
+                          className="underline text-primary-400 hover:text-primary-300"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {item.helpText}
                         </a>
                       ) : (
-                        <code className="px-2 py-1 bg-primary-800 rounded">{item.helpText}</code>
+                        <code className="px-2 py-1 rounded bg-primary-800">{item.helpText}</code>
                       )}
                     </p>
                   )}
@@ -243,7 +252,7 @@ export function SetupStage() {
       </Card>
 
       {/* Continue Button */}
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
           {!allComplete && (
             <p className="text-sm text-amber-400">
@@ -259,7 +268,7 @@ export function SetupStage() {
           )}
           <Button onClick={handleContinue} disabled={false}>
             {allComplete ? 'Continue to Foundation' : 'Continue Anyway'}
-            <ArrowRight className="w-4 h-4 ml-2" />
+            <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>
       </div>

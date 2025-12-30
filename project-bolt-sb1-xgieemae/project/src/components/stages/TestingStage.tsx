@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Card, Button, StageTips } from '../ui';
-import { Rocket, CheckCircle2, Circle, Download } from 'lucide-react';
+import { Card } from '../ui';
+import { Rocket, CheckCircle2, Circle } from 'lucide-react';
 
 interface ChecklistItem {
   id: number;
@@ -100,77 +100,6 @@ export function TestingStage() {
   const completionPercentage = Math.round((checklist.filter((item) => item.checked).length / checklist.length) * 100);
   const isComplete = completionPercentage >= 80;
 
-  const deploymentConfigs = [
-    {
-      platform: 'Vercel',
-      description: 'Best for Next.js and React apps',
-      config: `{
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install",
-  "devCommand": "npm run dev"
-}`,
-    },
-    {
-      platform: 'Netlify',
-      description: 'Great for static sites and JAMstack',
-      config: `{
-  "build": {
-    "command": "npm run build",
-    "publish": "dist"
-  }
-}`,
-    },
-    {
-      platform: 'Railway',
-      description: 'Full-stack apps with databases',
-      config: `{
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "npm start",
-    "restartPolicyType": "ON_FAILURE"
-  }
-}`,
-    },
-  ];
-
-  const cicdTemplate = `name: Deploy to Production
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '18'
-      - name: Install dependencies
-        run: npm ci
-      - name: Run tests
-        run: npm test
-      - name: Build application
-        run: npm run build
-      - name: Deploy
-        run: npm run deploy
-        env:
-          DEPLOY_TOKEN: \${{ secrets.DEPLOY_TOKEN }}`;
-
-  const downloadConfig = (platform: string, config: string) => {
-    const blob = new Blob([config], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${platform.toLowerCase()}.json`;
-    a.click();
-  };
-
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div>
@@ -182,12 +111,6 @@ jobs:
           Validate your work and prepare for launch.
         </p>
       </div>
-
-      <StageTips
-        stage="testing"
-        isComplete={isComplete}
-        maxTips={2}
-      />
 
       <Card>
         <div className="mb-6">
@@ -260,61 +183,6 @@ jobs:
             </ul>
           </div>
         </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-semibold text-primary-100 mb-4">Deployment Configuration</h2>
-
-        <div className="space-y-4">
-          {deploymentConfigs.map((config) => (
-            <div key={config.platform} className="p-4 bg-primary-800 rounded-lg">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-semibold text-primary-100">{config.platform}</h3>
-                  <p className="text-sm text-primary-400">{config.description}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  onClick={() => downloadConfig(config.platform, config.config)}
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Download
-                </Button>
-              </div>
-              <pre className="text-xs bg-primary-900 p-3 rounded mt-3 overflow-x-auto">
-                <code className="text-primary-300">{config.config}</code>
-              </pre>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-primary-100">CI/CD Pipeline Template</h2>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              const blob = new Blob([cicdTemplate], { type: 'text/yaml' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'deploy.yml';
-              a.click();
-            }}
-          >
-            <Download className="w-4 h-4 mr-1" />
-            Download
-          </Button>
-        </div>
-
-        <p className="text-sm text-primary-400 mb-4">
-          GitHub Actions workflow for automated testing and deployment
-        </p>
-
-        <pre className="text-xs bg-primary-900 p-4 rounded overflow-x-auto">
-          <code className="text-primary-300">{cicdTemplate}</code>
-        </pre>
       </Card>
 
       <div className="p-6 bg-green-900/20 border border-green-500/30 rounded-lg">

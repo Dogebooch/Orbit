@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -9,15 +9,14 @@ import {
   Code2,
   BookMarked,
   Rocket,
-  RefreshCw,
   Settings,
   LogOut,
   CheckCircle2,
-  Keyboard,
   Lock,
   Package,
 } from 'lucide-react';
-import { KEYBOARD_SHORTCUTS } from '../../hooks/useKeyboardShortcuts';
+import { TipsPanel } from '../ui/TipsPanel';
+import { getTipsForStage, getDismissedTips } from '../../config/tipsConfig';
 
 interface SidebarProps {
   onStageChange: (stage: string) => void;
@@ -30,7 +29,6 @@ interface StageCompletion {
   workbench: boolean;
   promptlibrary: boolean;
   testing: boolean;
-  maintenance: boolean;
 }
 
 export function Sidebar({ onStageChange }: SidebarProps) {
@@ -42,9 +40,8 @@ export function Sidebar({ onStageChange }: SidebarProps) {
     workbench: false,
     promptlibrary: false,
     testing: false,
-    maintenance: false,
   });
-  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showTipsPanel, setShowTipsPanel] = useState(false);
 
   // Calculate stage completion
   useEffect(() => {
@@ -56,7 +53,6 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         workbench: false,
         promptlibrary: false,
         testing: false,
-        maintenance: false,
       });
       return;
     }
@@ -69,7 +65,6 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         workbench: false,
         promptlibrary: false,
         testing: false,
-        maintenance: false,
       };
 
       // Check Setup completion (from settings)
@@ -145,20 +140,6 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         newCompletion.testing = completed >= 5;
       }
 
-      // Check Maintenance (has reviews or feedback)
-      const { data: reviewsData } = await supabase
-        .from('maintenance_reviews')
-        .select('id')
-        .eq('project_id', currentProject.id)
-        .limit(1);
-
-      const { data: feedbackData } = await supabase
-        .from('user_feedback')
-        .select('id')
-        .eq('project_id', currentProject.id)
-        .limit(1);
-
-      newCompletion.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
 
       setCompletion(newCompletion);
     };
@@ -171,14 +152,23 @@ export function Sidebar({ onStageChange }: SidebarProps) {
     { id: 'setup', name: 'Setup', icon: Package, description: 'Prerequisites', shortcut: '1' },
     { id: 'vision', name: 'Foundation', icon: Lightbulb, description: 'Vision & User', shortcut: '2' },
     { id: 'strategy', name: 'Strategy', icon: ListChecks, description: 'PRD & Launch', shortcut: '3' },
-    { id: 'workbench', name: 'Workbench', icon: Code2, description: 'Build & Code', shortcut: '4', requiresPRD: true },
+    { id: 'workbench', name: 'Workbench', icon: Code2, description: 'Build & Code', shortcut: '4' },
     { id: 'promptlibrary', name: 'Prompt Library', icon: BookMarked, description: 'Saved Prompts', shortcut: '5' },
     { id: 'testing', name: 'Testing', icon: Rocket, description: 'Ship & Deploy', shortcut: '6' },
-    { id: 'maintenance', name: 'Maintenance', icon: RefreshCw, description: 'Reviews & Feedback', shortcut: '7' },
   ];
 
   const completedCount = Object.values(completion).filter(Boolean).length;
   const totalCount = Object.keys(completion).length;
+
+  // Calculate tip count for current stage
+  const currentStageTipCount = useMemo(() => {
+    if (!currentStage) return 0;
+    const dismissedTips = getDismissedTips();
+    const tips = getTipsForStage(currentStage, {
+      excludeIds: dismissedTips,
+    });
+    return tips.length;
+  }, [currentStage]);
 
   return (
     <aside className="w-64 bg-primary-900 border-r border-accent-800 flex flex-col h-screen">
@@ -263,27 +253,19 @@ export function Sidebar({ onStageChange }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-accent-800 space-y-2">
-        {/* Keyboard Shortcuts Toggle */}
+        {/* Tips Button */}
         <button
-          onClick={() => setShowShortcuts(!showShortcuts)}
-          className="w-full flex items-center gap-3 p-3 rounded-lg text-primary-300 hover:bg-primary-800/50 hover:text-primary-100 transition-all duration-200"
+          onClick={() => setShowTipsPanel(true)}
+          className="w-full flex items-center gap-3 p-3 rounded-lg text-primary-300 hover:bg-primary-800/50 hover:text-primary-100 transition-all duration-200 relative"
         >
-          <Keyboard className="w-5 h-5" />
-          <span className="font-medium">Shortcuts</span>
+          <Lightbulb className="w-5 h-5" />
+          <span className="font-medium">Tips</span>
+          {currentStageTipCount > 0 && (
+            <span className="ml-auto px-2 py-0.5 text-xs bg-primary-700 text-primary-200 rounded-full">
+              {currentStageTipCount}
+            </span>
+          )}
         </button>
-
-        {showShortcuts && (
-          <div className="p-3 bg-primary-800/50 rounded-lg space-y-2 text-xs animate-fade-in">
-            {KEYBOARD_SHORTCUTS.map((shortcut, i) => (
-              <div key={i} className="flex justify-between items-center">
-                <span className="text-primary-400">{shortcut.description}</span>
-                <kbd className="px-1.5 py-0.5 bg-primary-700 text-primary-300 rounded text-[10px]">
-                  {shortcut.keys}
-                </kbd>
-              </div>
-            ))}
-          </div>
-        )}
 
         <button
           onClick={() => onStageChange('settings')}
@@ -305,6 +287,13 @@ export function Sidebar({ onStageChange }: SidebarProps) {
           <span className="font-medium">Sign Out</span>
         </button>
       </div>
+
+      {/* Tips Panel */}
+      <TipsPanel
+        isOpen={showTipsPanel}
+        onClose={() => setShowTipsPanel(false)}
+        currentStage={currentStage}
+      />
     </aside>
   );
 }

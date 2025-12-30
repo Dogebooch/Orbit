@@ -297,6 +297,15 @@ export const ADDITIONAL_CONTEXT_FIELDS: AdditionalContextField[] = [
     inputType: 'textarea',
     rows: 4,
   },
+  {
+    id: 'tech_stack',
+    label: 'Planned Tech Stack',
+    placeholder: 'e.g., React + TypeScript + Vite, Supabase, TailwindCSS',
+    field: 'tech_stack',
+    dataType: 'vision',
+    inputType: 'textarea',
+    rows: 2,
+  },
 ];
 
 export function getStepsByPhase(phase: string): StepConfig[] {

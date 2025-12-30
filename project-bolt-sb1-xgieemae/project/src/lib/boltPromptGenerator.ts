@@ -31,13 +31,7 @@ interface Feature {
   priority: 'must-have' | 'should-have' | 'nice-to-have';
 }
 
-interface TechStack {
-  frontend: string;
-  backend: string;
-  database: string;
-  deployment: string;
-  additionalTools?: string;
-}
+type TechStack = string;
 
 interface BoltPromptData {
   projectName: string;
@@ -100,11 +94,7 @@ ${userProfile.frustrations || 'Not specified'}
 ## Technical Stack
 
 Build this application using:
-- **Frontend:** ${getTechStackLabel('frontend', techStack.frontend)}
-- **Backend:** ${getTechStackLabel('backend', techStack.backend)}
-- **Database:** ${getTechStackLabel('database', techStack.database)}
-- **Deployment:** ${getTechStackLabel('deployment', techStack.deployment)}
-${techStack.additionalTools ? `- **Additional Tools:** ${techStack.additionalTools}` : ''}
+${techStack || 'Not specified'}
 
 ## MVP Features (Priority Order)
 
@@ -155,7 +145,7 @@ export function generateBoltPromptPreview(data: BoltPromptData): string {
 
 Problem: ${truncate(data.vision.problem, 100)}
 User: ${truncate(data.userProfile.primary_user, 80)}
-Stack: ${getTechStackLabel('frontend', data.techStack.frontend)}
+Stack: ${truncate(data.techStack, 80)}
 Features: ${mvpFeatureCount} MVP features defined
 
 [Full prompt is ${Math.ceil(generateBoltPrompt(data).length / 1000)}k characters]`;
@@ -193,44 +183,6 @@ function generateFeaturesSection(features: Feature[]): string {
       return section;
     })
     .join('\n\n');
-}
-
-/**
- * Helper: Get human-readable tech stack labels
- */
-function getTechStackLabel(category: string, value: string): string {
-  const labels: Record<string, Record<string, string>> = {
-    frontend: {
-      'react-vite': 'React + TypeScript + Vite',
-      'nextjs': 'Next.js + TypeScript',
-      'vue': 'Vue 3 + TypeScript',
-      'vanilla': 'Vanilla JavaScript',
-    },
-    backend: {
-      'none': 'None (Client-only)',
-      'supabase': 'Supabase (Backend-as-a-Service)',
-      'nodejs': 'Node.js + Express',
-      'edge': 'Edge Functions (Serverless)',
-      'tauri': 'Tauri (Rust Backend)',
-    },
-    database: {
-      'none': 'None',
-      'supabase-postgres': 'Supabase PostgreSQL',
-      'sqlite': 'SQLite',
-      'sqlite-better': 'SQLite with better-sqlite3 (Node.js/Electron)',
-      'sqlite-sqljs': 'SQLite with sql.js (Browser/WebAssembly)',
-      'firebase': 'Firebase Firestore',
-    },
-    deployment: {
-      'vercel': 'Vercel',
-      'netlify': 'Netlify',
-      'railway': 'Railway',
-      'electron': 'Electron Desktop App',
-      'local': 'Local Development Only',
-    },
-  };
-
-  return labels[category]?.[value] || value;
 }
 
 /**

@@ -27,6 +27,8 @@ interface TaskMasterTask {
   priority: 'high' | 'medium' | 'low';
   dependencies: number[];
   subtasks?: TaskMasterTask[];
+  details?: string;
+  testStrategy?: string;
 }
 
 interface TerminalOutputItem {
@@ -143,8 +145,9 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   // Terminal ref
   const terminalRef = useRef<HTMLDivElement | null>(null);
   
-  // Output callback for xterm
+  // Output callback for xterm - use ref to avoid stale closure issues
   const [onTerminalOutput, setOnTerminalOutputState] = useState<((data: string) => void) | null>(null);
+  const onTerminalOutputRef = useRef<((data: string) => void) | null>(null);
   
   // TaskMaster state
   const [taskMasterTasks, setTaskMasterTasks] = useState<TaskMasterTask[]>([]);
@@ -153,12 +156,83 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [geminiStatus, setGeminiStatus] = useState<'initializing' | 'ready' | 'error'>('initializing');
   const [onGeminiMessage, setOnGeminiMessageState] = useState<((message: { type: string; response?: string; error?: string; requestId?: string }) => void) | null>(null);
 
+  // Convert TaskMaster task to Orbit task format
+  const convertTaskMasterToOrbit = (task: TaskMasterTask, index: number) => {
+    // Map status
+    let status: 'pending' | 'in_progress' | 'completed' = 'pending';
+    if (task.status === 'in-progress') {
+      status = 'in_progress';
+    } else if (task.status === 'done') {
+      status = 'completed';
+    }
+
+    // Map priority (high=1, medium=3, low=5)
+    let priority = 3;
+    if (task.priority === 'high') {
+      priority = 1;
+    } else if (task.priority === 'low') {
+      priority = 5;
+    }
+
+    return {
+      id: `taskmaster-${task.id}`,
+      title: task.title,
+      description: task.description || '',
+      status,
+      priority,
+      order_index: index,
+      acceptance_criteria: task.testStrategy || '',
+      notes: `TaskMaster ID: ${task.id}${task.details ? '\n\n' + task.details : ''}`,
+    };
+  };
+
+  // Auto-import TaskMaster tasks to Supabase
+  const autoImportTasks = useCallback(async (taskMasterTasks: TaskMasterTask[]) => {
+    if (!currentProject || taskMasterTasks.length === 0) return;
+
+    try {
+      // Get existing tasks to avoid duplicates
+      const { data: existingTasks } = await supabase
+        .from('tasks')
+        .select('notes')
+        .eq('project_id', currentProject.id);
+
+      const existingTaskMasterIds = new Set(
+        existingTasks?.map((t: any) => {
+          const match = t.notes?.match(/TaskMaster ID: (\d+)/);
+          return match ? match[1] : null;
+        }).filter(Boolean) || []
+      );
+
+      // Convert and filter out duplicates
+      const tasksToImport = taskMasterTasks
+        .filter(task => !existingTaskMasterIds.has(String(task.id)))
+        .map((task, index) => convertTaskMasterToOrbit(task, index))
+        .map(task => ({
+          ...task,
+          project_id: currentProject.id,
+        }));
+
+      if (tasksToImport.length > 0) {
+        const { error } = await supabase.from('tasks').insert(tasksToImport);
+        if (error) {
+          console.error('[TaskMaster] Failed to import tasks:', error);
+        } else {
+          console.log(`[TaskMaster] Auto-imported ${tasksToImport.length} tasks`);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskMaster] Error during auto-import:', error);
+    }
+  }, [currentProject]);
+
   // Handle WebSocket messages
-  const handleServerMessage = useCallback((message: ServerMessage) => {
+  const handleServerMessage = useCallback((rawMessage: unknown) => {
+    const message = rawMessage as ServerMessage;
     switch (message.type) {
       case 'terminal:output':
-        if (message.data && onTerminalOutput) {
-          onTerminalOutput(message.data);
+        if (message.data && onTerminalOutputRef.current) {
+          onTerminalOutputRef.current(message.data);
         }
         break;
         
@@ -189,6 +263,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         if (message.tasks) {
           console.log(`[TaskMaster] Received ${message.tasks.length} tasks`);
           setTaskMasterTasks(message.tasks);
+          // Auto-import tasks silently
+          autoImportTasks(message.tasks);
         }
         break;
 
@@ -217,7 +293,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       default:
         console.log('[WebSocket] Unknown message type:', message.type);
     }
-  }, [onTerminalOutput, onGeminiMessage]);
+  }, [onGeminiMessage, autoImportTasks]); // onTerminalOutput removed - using ref instead
 
   // Connect to backend
   const connectBackend = useCallback(() => {
@@ -243,7 +319,26 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   // Auto-connect on mount
   useEffect(() => {
-    connectBackend();
+    // Check if server is available before attempting WebSocket connection
+    const attemptConnection = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:3001/health');
+        if (response.ok) {
+          // Server is running, connect via WebSocket
+          connectBackend();
+        } else {
+          // Server not responding, set error status
+          setConnectionStatus('error');
+        }
+      } catch (error) {
+        // Server not running or not reachable
+        setConnectionStatus('error');
+        // Still attempt WebSocket connection (it will fail gracefully)
+        connectBackend();
+      }
+    };
+    
+    attemptConnection();
     
     return () => {
       disconnectBackend();
@@ -290,6 +385,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   // Set terminal output callback
   const setOnTerminalOutput = useCallback((callback: (data: string) => void) => {
+    onTerminalOutputRef.current = callback;
     setOnTerminalOutputState(() => callback);
   }, []);
 
@@ -328,7 +424,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       setFavoriteCommands(
-        data.map((cmd) => ({
+        data.map((cmd: any) => ({
           id: cmd.id,
           command: cmd.command,
           description: cmd.description,
@@ -398,7 +494,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       setOutputBuffer(
-        data.map((item) => ({
+        data.map((item: any) => ({
           id: item.id,
           command: item.command,
           output: item.output,
@@ -409,8 +505,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         }))
       );
 
-      const uniqueCommands = Array.from(new Set(data.map((item) => item.command)));
-      setCommandHistory(uniqueCommands);
+      const uniqueCommands = Array.from(new Set(data.map((item: any) => item.command)));
+      setCommandHistory(uniqueCommands as string[]);
     }
   };
 

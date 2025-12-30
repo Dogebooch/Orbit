@@ -21,7 +21,6 @@ export function GitReminder({ taskTitle, onDismiss, autoDismissMs = 10000 }: Git
     // Clean the task title
     const cleanTitle = title
       .replace(/^\[?\d+\.?\d*\]?\.?\s*/, '') // Remove task numbers like "1." or "[1.2]"
-      .replace(/^\[IDEA\]\s*/i, '')
       .trim();
 
     // Determine commit type based on keywords
@@ -91,9 +90,9 @@ export function GitReminder({ taskTitle, onDismiss, autoDismissMs = 10000 }: Git
   };
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 bg-gradient-to-r from-green-900/90 to-emerald-900/90 border border-green-500/50 rounded-lg shadow-lg backdrop-blur-sm animate-slide-up z-50">
+    <div className="fixed right-4 bottom-4 z-50 w-96 bg-gradient-to-r rounded-lg border shadow-lg backdrop-blur-sm from-green-900/90 to-emerald-900/90 border-green-500/50 animate-slide-up">
       {/* Progress bar */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-green-800 rounded-t-lg overflow-hidden">
+      <div className="overflow-hidden absolute top-0 right-0 left-0 h-1 bg-green-800 rounded-t-lg">
         <div
           className="h-full bg-green-400 transition-all duration-100"
           style={{ width: `${progress}%` }}
@@ -101,9 +100,9 @@ export function GitReminder({ taskTitle, onDismiss, autoDismissMs = 10000 }: Git
       </div>
 
       <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-green-600/30 flex items-center justify-center">
+        <div className="flex gap-3 justify-between items-start">
+          <div className="flex gap-2 items-center">
+            <div className="flex justify-center items-center w-8 h-8 rounded-full bg-green-600/30">
               <GitCommit className="w-4 h-4 text-green-300" />
             </div>
             <div>
@@ -113,15 +112,15 @@ export function GitReminder({ taskTitle, onDismiss, autoDismissMs = 10000 }: Git
           </div>
           <button
             onClick={onDismiss}
-            className="text-green-400 hover:text-green-200 transition-colors"
+            className="text-green-400 transition-colors hover:text-green-200"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center gap-2 p-2 bg-primary-900/50 rounded border border-green-700/50">
-            <code className="flex-1 text-xs text-green-200 font-mono break-all">
+          <div className="flex gap-2 items-center p-2 rounded border bg-primary-900/50 border-green-700/50">
+            <code className="flex-1 font-mono text-xs text-green-200 break-all">
               {commitMessage}
             </code>
             <Button
@@ -139,7 +138,7 @@ export function GitReminder({ taskTitle, onDismiss, autoDismissMs = 10000 }: Git
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between">
+        <div className="flex justify-between items-center mt-2">
           <code className="text-[10px] text-green-500 font-mono">
             git commit -m "{commitMessage}"
           </code>

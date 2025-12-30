@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
+import { useTerminal } from '../../contexts/TerminalContext';
 import { Button } from '../ui';
-import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, Search, ListChecks, Code2, Rocket, RefreshCw, ArrowLeft, Package } from 'lucide-react';
+import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, ListChecks, Code2, Rocket, ArrowLeft, Package, RotateCcw } from 'lucide-react';
 import { TemplateSelector } from './TemplateSelector';
 import { ProjectTemplate, getTemplateById } from '../../lib/projectTemplates';
 
@@ -18,11 +19,9 @@ interface Project {
 interface StageProgress {
   setup: boolean;
   foundation: boolean;
-  research: boolean;
   strategy: boolean;
   workbench: boolean;
   testing: boolean;
-  maintenance: boolean;
 }
 
 interface ProjectSelectorProps {
@@ -34,6 +33,7 @@ type NewProjectStep = 'template' | 'details';
 
 export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }: ProjectSelectorProps) {
   const { user, currentProject, setCurrentProject, currentStage, setCurrentStage } = useApp();
+  const { isBackendConnected, wsClient } = useTerminal();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -42,14 +42,14 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [stageProgress, setStageProgress] = useState<StageProgress>({
     setup: false,
     foundation: false,
-    research: false,
     strategy: false,
     workbench: false,
     testing: false,
-    maintenance: false,
   });
 
   // Sync with external trigger for new project modal
@@ -77,11 +77,9 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
     const progress: StageProgress = {
       setup: false,
       foundation: false,
-      research: false,
       strategy: false,
       workbench: false,
       testing: false,
-      maintenance: false,
     };
 
     // Check Setup completion (from settings)
@@ -117,15 +115,6 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
       profileData?.goal
     );
 
-    // Check Research (optional - any apps created)
-    const { data: researchData } = await supabase
-      .from('research_apps')
-      .select('id')
-      .eq('project_id', currentProject.id)
-      .limit(1);
-
-    progress.research = (researchData?.length ?? 0) > 0;
-
     // Check Strategy (PRD exists)
     const { data: prdData } = await supabase
       .from('prds')
@@ -158,20 +147,6 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
       progress.testing = completed >= 5; // At least 50%
     }
 
-    // Check Maintenance (has reviews or feedback)
-    const { data: reviewsData } = await supabase
-      .from('maintenance_reviews')
-      .select('id')
-      .eq('project_id', currentProject.id)
-      .limit(1);
-
-    const { data: feedbackData } = await supabase
-      .from('user_feedback')
-      .select('id')
-      .eq('project_id', currentProject.id)
-      .limit(1);
-
-    progress.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
 
     setStageProgress(progress);
   };
@@ -272,6 +247,89 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
     setSelectedTemplate(null);
   };
 
+  const resetProject = async () => {
+    if (!currentProject || !user) return;
+
+    setResetting(true);
+    try {
+      const projectId = currentProject.id;
+
+      // Delete all related data from database tables
+      const tablesToClean = [
+        'visions',
+        'user_profiles',
+        'tasks',
+        'prds',
+        'terminal_sessions',
+        'terminal_output',
+        'research_apps',
+        'research_notes',
+        'research_images',
+        'project_configs',
+        'ai_sessions',
+        'maintenance_reviews',
+        'user_feedback',
+        'technical_metrics',
+      ];
+
+      // Delete from all tables in parallel
+      await Promise.all(
+        tablesToClean.map((table) =>
+          supabase.from(table).delete().eq('project_id', projectId)
+        )
+      );
+
+      // Delete project-specific settings
+      await supabase
+        .from('settings')
+        .delete()
+        .eq('user_id', user.id)
+        .like('key', `%_${projectId}`);
+
+      // Reset project to initial state
+      await supabase
+        .from('projects')
+        .update({
+          current_stage: 'setup',
+          description: '',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId);
+
+      // Clear project folder via WebSocket if backend is connected
+      if (isBackendConnected && wsClient) {
+        try {
+          wsClient.send({ type: 'project:clearFolder', projectId });
+        } catch (error) {
+          console.warn('[Reset] Failed to clear project folder via WebSocket:', error);
+        }
+      }
+
+      // Reload projects to get updated state
+      await loadProjects();
+
+      // Refresh current project
+      const { data: updatedProject } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (updatedProject) {
+        setCurrentProject(updatedProject);
+        setCurrentStage('setup');
+      }
+
+      setShowResetConfirm(false);
+      setShowDropdown(false);
+    } catch (error) {
+      console.error('Error resetting project:', error);
+      alert('Failed to reset project. Please try again.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (showNewProject) {
     return (
       <div className="p-4 border-b border-accent-800 bg-primary-900">
@@ -335,17 +393,15 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
   }
 
   const completedStages = Object.values(stageProgress).filter(Boolean).length;
-  const totalStages = 7;
+  const totalStages = 6;
   const progressPercent = Math.round((completedStages / totalStages) * 100);
 
   const stages = [
     { key: 'setup', id: 'setup', label: 'Setup', icon: Package, complete: stageProgress.setup },
     { key: 'foundation', id: 'vision', label: 'Foundation', icon: Lightbulb, complete: stageProgress.foundation },
-    { key: 'research', id: 'research', label: 'Research', icon: Search, complete: stageProgress.research },
     { key: 'strategy', id: 'strategy', label: 'Strategy', icon: ListChecks, complete: stageProgress.strategy },
     { key: 'workbench', id: 'workbench', label: 'Workbench', icon: Code2, complete: stageProgress.workbench },
     { key: 'testing', id: 'testing', label: 'Testing', icon: Rocket, complete: stageProgress.testing },
-    { key: 'maintenance', id: 'maintenance', label: 'Maintenance', icon: RefreshCw, complete: stageProgress.maintenance },
   ];
 
   return (
@@ -463,6 +519,57 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
                 )}
               </button>
             ))}
+          </div>
+          {currentProject && (
+            <>
+              <div className="border-t border-accent-700 mt-2" />
+              <div className="p-2">
+                <button
+                  onClick={() => {
+                    setShowResetConfirm(true);
+                    setShowDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-2 p-2 rounded hover:bg-red-900/30 text-red-400 text-sm transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reset Project
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Reset Confirmation Dialog */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-primary-800 border border-accent-700 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-primary-100 mb-2">Reset Project</h3>
+            <p className="text-sm text-primary-300 mb-6">
+              This will delete all project data (visions, tasks, PRDs, research, etc.) and clear the project folder.
+              The project record will be kept but reset to the initial setup stage.
+            </p>
+            <p className="text-sm text-red-400 mb-6 font-medium">
+              This action cannot be undone. Are you sure you want to continue?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resetting}
+                className="text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={resetProject}
+                loading={resetting}
+                className="text-sm bg-red-600 hover:bg-red-700"
+              >
+                Reset Project
+              </Button>
+            </div>
           </div>
         </div>
       )}

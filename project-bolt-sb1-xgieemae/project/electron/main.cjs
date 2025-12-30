@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -68,5 +69,36 @@ app.on('window-all-closed', () => {
 // Handle any IPC messages from the renderer
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Handle opening local files
+ipcMain.handle('open-local-file', async (event, relativePath) => {
+  try {
+    let filePath;
+    
+    if (isDev) {
+      // In development, resolve relative to project root
+      // __dirname is electron/ directory, so go up one level
+      filePath = path.join(__dirname, '..', relativePath);
+    } else {
+      // In production, resolve relative to app resources
+      // app.getAppPath() returns the path to the app.asar or unpacked app
+      filePath = path.join(app.getAppPath(), relativePath);
+    }
+    
+    // Normalize the path to handle any path separators
+    filePath = path.normalize(filePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${filePath}` };
+    }
+    
+    // Open the file with the system default application
+    await shell.openPath(filePath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });
 

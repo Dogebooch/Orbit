@@ -25,11 +25,9 @@ interface Project {
 export interface StageCompletion {
   setup: boolean;
   vision: boolean;
-  research: boolean;
   strategy: boolean;
   workbench: boolean;
   testing: boolean;
-  maintenance: boolean;
 }
 
 interface AppContextType {
@@ -49,11 +47,9 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DEFAULT_STAGE_COMPLETION: StageCompletion = {
   setup: false,
   vision: false,
-  research: false,
   strategy: false,
   workbench: false,
   testing: false,
-  maintenance: false,
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -74,11 +70,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const completion: StageCompletion = {
       setup: false,
       vision: false,
-      research: false,
       strategy: false,
       workbench: false,
       testing: false,
-      maintenance: false,
     };
 
     try {
@@ -103,14 +97,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
       
       completion.vision = !!(visionData?.problem && visionData?.target_user);
-
-      // Check Research stage - has at least one research entry
-      const { count: researchCount } = await supabase
-        .from('app_research')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', currentProject.id);
-      
-      completion.research = (researchCount ?? 0) > 0;
 
       // Check Strategy stage - has PRD content (at least 300 characters)
       const { data: prdData } = await supabase
@@ -141,20 +127,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         completion.testing = completedCount >= Math.ceil(tasksData.length / 2);
       }
 
-      // Check Maintenance stage - has at least one weekly review or user feedback
-      const { data: reviewsData } = await supabase
-        .from('maintenance_reviews')
-        .select('id')
-        .eq('project_id', currentProject.id)
-        .limit(1);
-
-      const { data: feedbackData } = await supabase
-        .from('user_feedback')
-        .select('id')
-        .eq('project_id', currentProject.id)
-        .limit(1);
-
-      completion.maintenance = (reviewsData?.length ?? 0) > 0 || (feedbackData?.length ?? 0) > 0;
 
       setStageCompletion(completion);
     } catch (error) {

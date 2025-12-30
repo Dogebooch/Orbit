@@ -9,7 +9,8 @@ export type ClientMessage =
   | { type: 'config:writeFile'; relativePath: string; content: string }
   | { type: 'config:createDir'; relativePath: string }
   | { type: 'gemini:send'; prompt: string; context?: string; requestId?: string }
-  | { type: 'gemini:initialize'; projectContext?: ProjectContext };
+  | { type: 'gemini:initialize'; projectContext?: ProjectContext }
+  | { type: 'project:clearFolder'; projectId: string };
 
 // Backend -> Frontend messages
 export type ServerMessage =
@@ -24,7 +25,8 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'gemini:response'; response: string; requestId?: string }
   | { type: 'gemini:error'; error: string; requestId?: string }
-  | { type: 'gemini:status'; status: 'initializing' | 'ready' | 'error' };
+  | { type: 'gemini:status'; status: 'initializing' | 'ready' | 'error' }
+  | { type: 'project:clearFolderResult'; success: boolean; error?: string };
 
 // TaskMaster task format (from .taskmaster/tasks/tasks.json)
 export interface TaskMasterTask {

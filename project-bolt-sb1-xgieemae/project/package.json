@@ -1,7 +1,7 @@
 {
   "name": "orbit-mission-control",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.7",
   "type": "module",
   "main": "electron/main.cjs",
   "author": "Orbit Team",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
-import { Card, Button, StageTips, useFirstVisit, Input } from '../ui';
+import { Card, Button, useFirstVisit, Input } from '../ui';
 import {
   Settings,
   Copy,
@@ -201,12 +201,6 @@ export function SettingsStage() {
           Configure AI integrations, generate project files, and set up MCP servers.
         </p>
       </div>
-
-      <StageTips
-        stage="settings"
-        isFirstVisit={isFirstVisit}
-        maxTips={1}
-      />
 
       {/* Project Files Section */}
       <Card>

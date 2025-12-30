@@ -9,8 +9,8 @@ interface ShortcutHandlers {
   onCopyContext?: () => void;
 }
 
-// Updated stages: removed research, added setup at the beginning, added maintenance at the end
-const STAGES = ['dashboard', 'setup', 'vision', 'strategy', 'workbench', 'promptlibrary', 'testing', 'maintenance'];
+// Updated stages: removed research, added setup at the beginning, removed maintenance
+const STAGES = ['dashboard', 'setup', 'vision', 'strategy', 'workbench', 'promptlibrary', 'testing'];
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   const handleKeyDown = useCallback((event: KeyboardEvent) => {

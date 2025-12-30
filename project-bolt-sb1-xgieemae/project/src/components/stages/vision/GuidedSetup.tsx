@@ -59,9 +59,9 @@ export function GuidedSetup({
       };
     }
     if (s.dataType === 'vision') {
-      return (vision as Record<string, string>)[s.field] || '';
+      return (vision as unknown as Record<string, string>)[s.field] || '';
     }
-    return (userProfile as Record<string, string>)[s.field] || '';
+    return (userProfile as unknown as Record<string, string>)[s.field] || '';
   };
 
   const setValue = (s: StepConfig, value: string | Record<string, string>) => {
