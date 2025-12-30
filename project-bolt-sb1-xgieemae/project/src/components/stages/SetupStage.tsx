@@ -8,9 +8,7 @@ import {
   AlertTriangle,
   Terminal,
   Key,
-  Folder,
   ArrowRight,
-  ExternalLink,
   Rocket,
   Package,
 } from 'lucide-react';
@@ -22,15 +20,6 @@ interface PrerequisiteItem {
   icon: React.ElementType;
   helpLink?: string;
   helpText?: string;
-}
-
-interface TemplateOption {
-  id: string;
-  name: string;
-  description: string;
-  command?: string;
-  externalLink?: string;
-  recommended?: boolean;
 }
 
 const PREREQUISITES: PrerequisiteItem[] = [
@@ -57,40 +46,6 @@ const PREREQUISITES: PrerequisiteItem[] = [
     helpLink: 'https://console.anthropic.com/',
     helpText: 'Get your API key from console.anthropic.com',
   },
-  {
-    id: 'starter_template',
-    label: 'Starter template selected',
-    description: 'Choose a template or use Bolt.new to scaffold your project',
-    icon: Folder,
-  },
-];
-
-const TEMPLATE_OPTIONS: TemplateOption[] = [
-  {
-    id: 'bolt',
-    name: 'Bolt.new',
-    description: 'AI-powered scaffolding with live preview. Best for new projects.',
-    externalLink: 'https://bolt.new',
-    recommended: true,
-  },
-  {
-    id: 'nextjs',
-    name: 'Next.js',
-    description: 'Full-stack React framework with SSR and API routes',
-    command: 'npx create-next-app@latest my-app --typescript --tailwind --eslint',
-  },
-  {
-    id: 'vite-react',
-    name: 'Vite + React',
-    description: 'Fast, modern React setup with Vite bundler',
-    command: 'npm create vite@latest my-app -- --template react-ts',
-  },
-  {
-    id: 'vue',
-    name: 'Vue 3',
-    description: 'Progressive JavaScript framework with Vite',
-    command: 'npm create vue@latest',
-  },
 ];
 
 export function SetupStage() {
@@ -99,10 +54,7 @@ export function SetupStage() {
     nodejs: false,
     claude_cli: false,
     api_key: false,
-    starter_template: false,
   });
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load saved state
@@ -123,9 +75,8 @@ export function SetupStage() {
         .maybeSingle();
 
       if (data?.value) {
-        const saved = data.value as { checkedItems: Record<string, boolean>; selectedTemplate: string | null };
+        const saved = data.value as { checkedItems: Record<string, boolean> };
         setCheckedItems(saved.checkedItems || {});
-        setSelectedTemplate(saved.selectedTemplate || null);
       }
     } catch (err) {
       console.error('Error loading setup state:', err);
@@ -134,7 +85,7 @@ export function SetupStage() {
     }
   };
 
-  const saveState = async (newChecked: Record<string, boolean>, newTemplate: string | null) => {
+  const saveState = async (newChecked: Record<string, boolean>) => {
     if (!user) return;
 
     try {
@@ -145,7 +96,7 @@ export function SetupStage() {
         .eq('key', 'setup_prerequisites')
         .maybeSingle();
 
-      const value = { checkedItems: newChecked, selectedTemplate: newTemplate };
+      const value = { checkedItems: newChecked };
 
       if (existing) {
         await supabase
@@ -167,20 +118,7 @@ export function SetupStage() {
   const toggleItem = (id: string) => {
     const newChecked = { ...checkedItems, [id]: !checkedItems[id] };
     setCheckedItems(newChecked);
-    saveState(newChecked, selectedTemplate);
-  };
-
-  const handleTemplateSelect = (templateId: string) => {
-    setSelectedTemplate(templateId);
-    const newChecked = { ...checkedItems, starter_template: true };
-    setCheckedItems(newChecked);
-    saveState(newChecked, templateId);
-  };
-
-  const copyCommand = async (command: string, templateId: string) => {
-    await navigator.clipboard.writeText(command);
-    setCopiedCommand(templateId);
-    setTimeout(() => setCopiedCommand(null), 2000);
+    saveState(newChecked);
   };
 
   const allComplete = Object.values(checkedItems).every(Boolean);
@@ -254,131 +192,51 @@ export function SetupStage() {
           {PREREQUISITES.map((item) => {
             const Icon = item.icon;
             const isChecked = checkedItems[item.id];
-            const isTemplateItem = item.id === 'starter_template';
 
             return (
-              <div key={item.id}>
-                <button
-                  onClick={() => !isTemplateItem && toggleItem(item.id)}
-                  className={`w-full flex items-start gap-4 p-4 rounded-lg border-2 transition-all ${
-                    isChecked
-                      ? 'bg-green-900/20 border-green-600/50'
-                      : 'bg-primary-800/30 border-primary-700 hover:border-primary-600'
-                  } ${isTemplateItem ? 'cursor-default' : 'cursor-pointer'}`}
-                >
-                  <div className={`mt-0.5 ${isChecked ? 'text-green-400' : 'text-primary-500'}`}>
-                    {isChecked ? (
-                      <CheckCircle2 className="w-6 h-6" />
-                    ) : (
-                      <Circle className="w-6 h-6" />
-                    )}
+              <button
+                key={item.id}
+                onClick={() => toggleItem(item.id)}
+                className={`w-full flex items-start gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                  isChecked
+                    ? 'bg-green-900/20 border-green-600/50'
+                    : 'bg-primary-800/30 border-primary-700 hover:border-primary-600'
+                }`}
+              >
+                <div className={`mt-0.5 ${isChecked ? 'text-green-400' : 'text-primary-500'}`}>
+                  {isChecked ? (
+                    <CheckCircle2 className="w-6 h-6" />
+                  ) : (
+                    <Circle className="w-6 h-6" />
+                  )}
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="flex items-center gap-3">
+                    <Icon className={`w-5 h-5 ${isChecked ? 'text-green-400' : 'text-primary-400'}`} />
+                    <span className={`font-medium ${isChecked ? 'text-green-300' : 'text-primary-100'}`}>
+                      {item.label}
+                    </span>
                   </div>
-                  <div className="flex-1 text-left">
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-5 h-5 ${isChecked ? 'text-green-400' : 'text-primary-400'}`} />
-                      <span className={`font-medium ${isChecked ? 'text-green-300' : 'text-primary-100'}`}>
-                        {item.label}
-                      </span>
-                    </div>
-                    <p className="text-sm text-primary-400 mt-1 ml-8">{item.description}</p>
-                    {item.helpText && !isTemplateItem && (
-                      <p className="text-xs text-primary-500 mt-2 ml-8">
-                        {item.helpLink ? (
-                          <a
-                            href={item.helpLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary-400 hover:text-primary-300 underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {item.helpText}
-                          </a>
-                        ) : (
-                          <code className="px-2 py-1 bg-primary-800 rounded">{item.helpText}</code>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                </button>
-
-                {/* Template Selection (nested under starter_template) */}
-                {isTemplateItem && (
-                  <div className="ml-10 mt-4 space-y-3">
-                    {TEMPLATE_OPTIONS.map((template) => (
-                      <div
-                        key={template.id}
-                        className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                          selectedTemplate === template.id
-                            ? 'bg-purple-900/30 border-purple-500/50'
-                            : 'bg-primary-800/20 border-primary-700/50 hover:border-primary-600'
-                        }`}
-                        onClick={() => handleTemplateSelect(template.id)}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-medium ${
-                                selectedTemplate === template.id ? 'text-purple-300' : 'text-primary-100'
-                              }`}>
-                                {template.name}
-                              </span>
-                              {template.recommended && (
-                                <span className="text-[10px] px-2 py-0.5 bg-purple-600/30 border border-purple-500/50 rounded-full text-purple-300">
-                                  Recommended
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-primary-400 mt-1">{template.description}</p>
-                          </div>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                            selectedTemplate === template.id
-                              ? 'border-purple-400 bg-purple-500'
-                              : 'border-primary-600'
-                          }`}>
-                            {selectedTemplate === template.id && (
-                              <div className="w-2 h-2 bg-white rounded-full" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Command or Link */}
-                        {selectedTemplate === template.id && (
-                          <div className="mt-3 pt-3 border-t border-primary-700/50">
-                            {template.command ? (
-                              <div className="flex items-center gap-2">
-                                <code className="flex-1 px-3 py-2 bg-primary-900 rounded text-sm text-primary-300 font-mono">
-                                  {template.command}
-                                </code>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    copyCommand(template.command!, template.id);
-                                  }}
-                                >
-                                  {copiedCommand === template.id ? 'Copied!' : 'Copy'}
-                                </Button>
-                              </div>
-                            ) : template.externalLink ? (
-                              <a
-                                href={template.externalLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white text-sm font-medium transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                                Open {template.name}
-                              </a>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  <p className="text-sm text-primary-400 mt-1 ml-8">{item.description}</p>
+                  {item.helpText && (
+                    <p className="text-xs text-primary-500 mt-2 ml-8">
+                      {item.helpLink ? (
+                        <a
+                          href={item.helpLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-400 hover:text-primary-300 underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {item.helpText}
+                        </a>
+                      ) : (
+                        <code className="px-2 py-1 bg-primary-800 rounded">{item.helpText}</code>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </button>
             );
           })}
         </div>
