@@ -40,6 +40,8 @@ interface AppContextType {
   setCurrentStage: (stage: string) => void;
   refreshStageCompletion: () => Promise<void>;
   signOut: () => Promise<void>;
+  triggerProjectSelectorDropdown: () => void;
+  projectSelectorDropdownTrigger: number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -59,6 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentStage, setCurrentStage] = useState('setup');
   const [stageCompletion, setStageCompletion] = useState<StageCompletion>(DEFAULT_STAGE_COMPLETION);
+  const [triggerDropdown, setTriggerDropdown] = useState(0);
 
   // Check stage completion status
   const refreshStageCompletion = useCallback(async () => {
@@ -148,6 +151,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setStageCompletion(DEFAULT_STAGE_COMPLETION);
   };
 
+  const triggerProjectSelectorDropdown = useCallback(() => {
+    setTriggerDropdown(prev => prev + 1);
+  }, []);
+
   const value = {
     user,
     loading,
@@ -158,6 +165,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentStage,
     refreshStageCompletion,
     signOut,
+    triggerProjectSelectorDropdown,
+    projectSelectorDropdownTrigger: triggerDropdown,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

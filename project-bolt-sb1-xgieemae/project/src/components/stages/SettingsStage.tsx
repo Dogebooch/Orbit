@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useTerminal } from '../../contexts/TerminalContext';
+import { supabase } from '../../lib/supabase';
 import { Card, Button, useFirstVisit, Input } from '../ui';
 import {
   Settings,
@@ -19,6 +20,8 @@ import {
   Download,
   FolderCog,
   Terminal,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { ProjectFilesWizard } from './settings/ProjectFilesWizard';
 import {
@@ -36,7 +39,7 @@ import {
 } from '../../lib/configGenerator';
 
 export function SettingsStage() {
-  const { currentProject } = useApp();
+  const { user, currentProject, setCurrentProject, setCurrentStage, triggerProjectSelectorDropdown } = useApp();
   const { isBackendConnected, wsClient, workingDirectory } = useTerminal();
   
   const [copiedServer, setCopiedServer] = useState<string | null>(null);
@@ -57,6 +60,12 @@ export function SettingsStage() {
   const [configWriteError, setConfigWriteError] = useState<string | null>(null);
   const [showMcpPreview, setShowMcpPreview] = useState(false);
   const [showTaskmasterPreview, setShowTaskmasterPreview] = useState(false);
+
+  // Project management state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isFirstVisit = useFirstVisit('settings');
 
@@ -188,6 +197,143 @@ export function SettingsStage() {
     navigator.clipboard.writeText(config);
     setCopiedServer(serverName);
     setTimeout(() => setCopiedServer(null), 2000);
+  };
+
+  const resetProject = async () => {
+    if (!currentProject || !user) return;
+
+    setResetting(true);
+    try {
+      const projectId = currentProject.id;
+
+      // Delete all related data from database tables
+      const tablesToClean = [
+        'visions',
+        'user_profiles',
+        'tasks',
+        'prds',
+        'terminal_sessions',
+        'terminal_output',
+        'research_apps',
+        'research_notes',
+        'research_images',
+        'project_configs',
+        'ai_sessions',
+        'maintenance_reviews',
+        'user_feedback',
+        'technical_metrics',
+      ];
+
+      // Delete from all tables in parallel
+      await Promise.all(
+        tablesToClean.map((table) =>
+          supabase.from(table).delete().eq('project_id', projectId)
+        )
+      );
+
+      // Delete project-specific settings
+      await supabase
+        .from('settings')
+        .delete()
+        .eq('user_id', user.id)
+        .like('key', `%_${projectId}`);
+
+      // Reset project to initial state
+      await supabase
+        .from('projects')
+        .update({
+          current_stage: 'setup',
+          description: '',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId);
+
+      // Clear project folder via WebSocket if backend is connected
+      if (isBackendConnected && wsClient) {
+        try {
+          wsClient.send({ type: 'project:clearFolder', projectId });
+        } catch (error) {
+          console.warn('[Reset] Failed to clear project folder via WebSocket:', error);
+        }
+      }
+
+      // Refresh current project
+      const { data: updatedProject } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (updatedProject) {
+        setCurrentProject(updatedProject);
+        setCurrentStage('setup');
+      }
+
+      setShowResetConfirm(false);
+    } catch (error) {
+      console.error('Error resetting project:', error);
+      alert('Failed to reset project. Please try again.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const deleteProject = async () => {
+    if (!currentProject || !user) return;
+
+    setDeleting(true);
+    try {
+      const projectId = currentProject.id;
+
+      // Delete the project record (cascades to related data via ON DELETE CASCADE)
+      const { error: deleteError } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (deleteError) throw deleteError;
+
+      // Delete project-specific settings
+      await supabase
+        .from('settings')
+        .delete()
+        .eq('user_id', user.id)
+        .like('key', `%_${projectId}`);
+
+      // Clear project folder via WebSocket if backend is connected
+      if (isBackendConnected && wsClient) {
+        try {
+          wsClient.send({ type: 'project:clearFolder', projectId });
+        } catch (error) {
+          console.warn('[Delete] Failed to clear project folder via WebSocket:', error);
+        }
+      }
+
+      // Check if there are other projects
+      const { data: remainingProjects } = await supabase
+        .from('projects')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (remainingProjects && remainingProjects.length > 0) {
+        // Switch to the first available project
+        setCurrentProject(remainingProjects[0]);
+        setCurrentStage(remainingProjects[0].current_stage);
+      } else {
+        // No projects left - trigger dropdown to open and highlight "New Project"
+        setCurrentProject(null);
+        setCurrentStage('setup');
+        // Trigger the dropdown to open
+        triggerProjectSelectorDropdown();
+      }
+
+      setShowDeleteConfirm(false);
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      alert('Failed to delete project. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -671,6 +817,125 @@ export function SettingsStage() {
           </div>
         )}
       </Card>
+
+      {/* Project Management Section */}
+      <Card>
+        <div className="flex items-center gap-3 mb-4">
+          <AlertCircle className="w-6 h-6 text-red-400" />
+          <div>
+            <h2 className="text-xl font-semibold text-primary-100">Project Management</h2>
+            <p className="text-sm text-primary-400">
+              Reset or delete the current project
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+            <p className="text-sm text-red-200">
+              <strong>Warning:</strong> These actions are destructive and cannot be undone. Use with caution.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="primary"
+              onClick={() => setShowResetConfirm(true)}
+              disabled={!currentProject}
+              className="flex-1 bg-amber-600 hover:bg-amber-700"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Project
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={!currentProject}
+              className="flex-1 bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Project
+            </Button>
+          </div>
+
+          <div className="text-xs text-primary-500 space-y-1">
+            <p><strong>Reset Project:</strong> Deletes all project data but keeps the project record. Resets to initial setup stage.</p>
+            <p><strong>Delete Project:</strong> Permanently deletes the entire project and all associated data.</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Reset Confirmation Dialog */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-primary-800 border border-accent-700 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-primary-100 mb-2">Reset Project</h3>
+            <p className="text-sm text-primary-300 mb-4">
+              This will delete all project data (visions, tasks, PRDs, research, etc.) and clear the project folder.
+              The project record will be kept but reset to the initial setup stage.
+            </p>
+            <p className="text-sm text-red-400 mb-6 font-medium">
+              This action cannot be undone. Are you sure you want to continue?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resetting}
+                className="text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={resetProject}
+                loading={resetting}
+                className="text-sm bg-amber-600 hover:bg-amber-700"
+              >
+                Reset Project
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-primary-800 border border-accent-700 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-primary-100 mb-2">Delete Project</h3>
+            <p className="text-sm text-primary-300 mb-4">
+              This will permanently delete the entire project "{currentProject?.name}" and all associated data including:
+            </p>
+            <ul className="text-sm text-primary-400 mb-4 list-disc list-inside space-y-1">
+              <li>All project data (visions, tasks, PRDs, research, etc.)</li>
+              <li>The project record itself</li>
+              <li>All project files and folders</li>
+            </ul>
+            <p className="text-sm text-red-400 mb-6 font-medium">
+              This action cannot be undone. Are you absolutely sure you want to delete this project?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={deleteProject}
+                loading={deleting}
+                className="text-sm bg-red-600 hover:bg-red-700"
+              >
+                Delete Project
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
