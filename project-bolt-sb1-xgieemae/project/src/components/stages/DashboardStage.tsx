@@ -1,403 +1,245 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { supabase } from '../../lib/supabase';
-import { Card, Button } from '../ui';
+import { Card } from '../ui';
 import {
   LayoutDashboard,
-  Lightbulb,
-  ListChecks,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  FileText,
+  Zap,
   Code2,
-  Rocket,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Clock,
-  TrendingUp,
-  AlertCircle,
+  FileCode,
+  ListChecks,
   PlayCircle,
+  TestTube,
 } from 'lucide-react';
 
 interface DashboardStageProps {
   onNavigate: (stage: string) => void;
 }
 
-interface StageStatus {
+interface GuideItem {
   id: string;
-  name: string;
-  description: string;
-  icon: React.ElementType;
-  complete: boolean;
-  progress: number;
-  details: string;
+  label: string;
+  description?: string;
 }
 
-interface Task {
+interface GuideSection {
   id: string;
   title: string;
-  status: 'pending' | 'in_progress' | 'completed';
+  icon: React.ElementType;
+  items: GuideItem[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function DashboardStage({ onNavigate }: DashboardStageProps) {
-  const { currentProject, user } = useApp();
-  const [stages, setStages] = useState<StageStatus[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [nextAction, setNextAction] = useState<{ label: string; stage: string; description: string } | null>(null);
+  const { currentProject } = useApp();
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    phase1: true,
+    phase2: false,
+    phase3: false,
+    phase4: false,
+    phase5: false,
+    phase6: false,
+    phase7: false,
+  });
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
+  // Load checkbox states from localStorage
   useEffect(() => {
     if (currentProject) {
-      loadDashboardData();
+      const storageKey = `guide_${currentProject.id}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          setCheckedItems(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to load guide progress:', e);
+        }
+      }
     }
   }, [currentProject]);
 
-  const loadDashboardData = async () => {
+  // Save checkbox states to localStorage
+  const toggleCheckbox = (itemId: string) => {
     if (!currentProject) return;
-    setLoading(true);
-
-    const stageStatuses: StageStatus[] = [];
-
-    // 1. Check Vision Stage
-    const { data: visionData } = await supabase
-      .from('visions')
-      .select('problem, target_user, success_metrics, why_software')
-      .eq('project_id', currentProject.id)
-      .maybeSingle();
-
-    const { data: profileData } = await supabase
-      .from('user_profiles')
-      .select('primary_user, goal, frustrations, technical_comfort')
-      .eq('project_id', currentProject.id)
-      .maybeSingle();
-
-    const visionFields = [
-      visionData?.problem,
-      visionData?.target_user,
-      visionData?.success_metrics,
-      profileData?.primary_user,
-      profileData?.goal,
-    ];
-    const visionComplete = visionFields.filter(Boolean).length;
-    const visionTotal = visionFields.length;
-
-    stageStatuses.push({
-      id: 'vision',
-      name: 'Foundation',
-      description: 'Vision & User Profile',
-      icon: Lightbulb,
-      complete: visionComplete === visionTotal,
-      progress: Math.round((visionComplete / visionTotal) * 100),
-      details: `${visionComplete}/${visionTotal} fields completed`,
-    });
-
-    // 2. Check Strategy Stage
-    const { data: prdData } = await supabase
-      .from('prds')
-      .select('content')
-      .eq('project_id', currentProject.id)
-      .maybeSingle();
-
-    const prdLength = prdData?.content?.length ?? 0;
-    const prdComplete = prdLength > 500;
-    stageStatuses.push({
-      id: 'strategy',
-      name: 'Strategy',
-      description: 'PRD & Tasks',
-      icon: ListChecks,
-      complete: prdComplete,
-      progress: Math.min(100, Math.round((prdLength / 500) * 100)),
-      details: prdComplete ? 'PRD completed' : prdLength > 0 ? 'PRD in progress' : 'No PRD yet',
-    });
-
-    // 4. Check Workbench Stage (Tasks)
-    const { data: taskData } = await supabase
-      .from('tasks')
-      .select('id, title, status')
-      .eq('project_id', currentProject.id)
-      .order('order_index', { ascending: true });
-
-    const allTasks = taskData ?? [];
-    setTasks(allTasks);
-    
-    const completedTasks = allTasks.filter((t: any) => t.status === 'completed').length;
-    const totalTasks = allTasks.length;
-    const workbenchProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-    stageStatuses.push({
-      id: 'workbench',
-      name: 'Workbench',
-      description: 'Build & Code',
-      icon: Code2,
-      complete: totalTasks > 0 && completedTasks === totalTasks,
-      progress: workbenchProgress,
-      details: totalTasks > 0 ? `${completedTasks}/${totalTasks} tasks done` : 'No tasks yet',
-    });
-
-    // 5. Check Testing Stage
-    const { data: settingsData } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('user_id', user?.id)
-      .eq('key', `testing_checklist_${currentProject.id}`)
-      .maybeSingle();
-
-    let testingProgress = 0;
-    let testingComplete = false;
-    if (settingsData?.value) {
-      const checks = Object.values(settingsData.value as Record<number, boolean>);
-      const completed = checks.filter(Boolean).length;
-      testingProgress = Math.round((completed / 10) * 100);
-      testingComplete = completed >= 10;
-    }
-
-    stageStatuses.push({
-      id: 'testing',
-      name: 'Testing',
-      description: 'Ship & Deploy',
-      icon: Rocket,
-      complete: testingComplete,
-      progress: testingProgress,
-      details: testingComplete ? 'Ready to ship!' : `${testingProgress}% validated`,
-    });
-
-    setStages(stageStatuses);
-
-    // Determine next suggested action
-    const incompleteStage = stageStatuses.find(s => !s.complete);
-    if (incompleteStage) {
-      const actions: Record<string, { label: string; description: string }> = {
-        vision: { label: 'Complete your Foundation', description: 'Define your vision and target user to guide AI assistants' },
-        strategy: { label: 'Write your PRD', description: 'Create a Product Requirements Document' },
-        workbench: { label: 'Work on tasks', description: allTasks.find((t: any) => t.status === 'in_progress')?.title || 'Start implementing features' },
-        testing: { label: 'Validate your app', description: 'Complete the testing checklist before shipping' },
-      };
-      setNextAction({
-        stage: incompleteStage.id,
-        ...actions[incompleteStage.id],
-      });
-    } else {
-      setNextAction(null);
-    }
-
-    setLoading(false);
+    const newChecked = { ...checkedItems, [itemId]: !checkedItems[itemId] };
+    setCheckedItems(newChecked);
+    const storageKey = `guide_${currentProject.id}`;
+    localStorage.setItem(storageKey, JSON.stringify(newChecked));
   };
 
-  const overallProgress = stages.length > 0
-    ? Math.round(stages.reduce((acc, s) => acc + s.progress, 0) / stages.length)
-    : 0;
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
 
-  const currentTask = tasks.find(t => t.status === 'in_progress');
-  const pendingTasks = tasks.filter(t => t.status === 'pending').slice(0, 3);
-  // const recentlyCompleted = tasks.filter(t => t.status === 'completed').slice(-3);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-primary-400">Loading dashboard...</div>
-      </div>
-    );
-  }
+  const guideSections: GuideSection[] = [
+    {
+      id: 'phase1',
+      title: 'Phase 1: Foundation Documents',
+      icon: FileText,
+      items: [
+        { id: 'purpose_framework', label: 'Complete Purpose Framework (3 questions)', description: 'What problem? What change? Is it worth solving with software?' },
+        { id: 'vision_doc', label: 'Create 0_vision.md', description: 'Define problem, target user, MVP scope, and out of scope' },
+        { id: 'user_profile', label: 'Create 1_user_profile.md', description: 'Detailed character sketch of primary user' },
+        { id: 'success_metrics', label: 'Create 2_success_metrics.md', description: 'Define what "working" means in measurable terms' },
+        { id: 'competitive_research', label: 'Create Competitive Research Document', description: 'Analyze 3-5 existing tools' },
+      ],
+    },
+    {
+      id: 'phase2',
+      title: 'Phase 2: Bolt Bootstrap',
+      icon: Zap,
+      items: [
+        { id: 'bolt_scaffold', label: 'Generate project scaffold on Bolt.new', description: 'Include stack preferences (Next.js/Electron, React, TypeScript, Tailwind)' },
+        { id: 'verify_setup', label: 'Verify dev server starts', description: 'Run the project and confirm it works' },
+      ],
+    },
+    {
+      id: 'phase3',
+      title: 'Phase 3: GitHub Copilot AI Instructions',
+      icon: Code2,
+      items: [
+        { id: 'copilot_instructions', label: 'Generate Copilot AI Instructions', description: 'Use Copilot Chat to analyze codebase and save to .github/copilot-instructions.md' },
+        { id: 'claude_md', label: 'Generate CLAUDE.md', description: 'Combine foundation docs and copilot instructions into CLAUDE.md' },
+        { id: 'tool_curation', label: 'Configure Tool Curation (Optional)', description: 'Set up .claude/settings.json for permissions' },
+      ],
+    },
+    {
+      id: 'phase4',
+      title: 'Phase 4: Generate PRD',
+      icon: FileCode,
+      items: [
+        { id: 'functional_reqs', label: 'Generate Functional Requirements (Optional)', description: 'Use /reqs command to create concise requirements' },
+        { id: 'generate_prd', label: 'Generate PRD', description: 'Use Claude to create comprehensive PRD from foundation docs' },
+        { id: 'save_prd', label: 'Save PRD to scripts/prd.txt', description: 'Store PRD for TaskMaster parsing' },
+      ],
+    },
+    {
+      id: 'phase5',
+      title: 'Phase 5: TaskMaster Setup',
+      icon: ListChecks,
+      items: [
+        { id: 'taskmaster_config', label: 'Create .taskmaster/config.json', description: 'Configure TaskMaster with model settings' },
+        { id: 'mcp_config', label: 'Create .mcp.json in project root', description: 'Configure MCP server for TaskMaster' },
+        { id: 'init_git', label: 'Initialize git and commit scaffold', description: 'git init && git add . && git commit' },
+        { id: 'parse_prd', label: 'Parse PRD with TaskMaster', description: 'Ask Claude to parse scripts/prd.txt and set up tasks' },
+        { id: 'analyze_complexity', label: 'Analyze task complexity', description: 'Identify tasks that need breakdown' },
+        { id: 'breakdown_tasks', label: 'Break down high-complexity tasks', description: 'Create subtasks for complex items' },
+      ],
+    },
+    {
+      id: 'phase6',
+      title: 'Phase 6: The Overseer Build Loop',
+      icon: PlayCircle,
+      items: [
+        { id: 'start_session', label: 'Start Session', description: 'Use /start command to begin' },
+        { id: 'view_tasks', label: 'View Tasks', description: 'Use /tasks to check project status' },
+        { id: 'select_task', label: 'Select Next Task', description: 'Use /next to get task recommendation' },
+        { id: 'generate_brief', label: 'Generate Copilot Brief', description: 'Use /brief [Task ID] to create prompt for Copilot' },
+        { id: 'implement_copilot', label: 'Implement with Copilot', description: 'Paste brief into VS Code Copilot Chat' },
+        { id: 'architectural_audit', label: 'Architectural Audit', description: 'Use /review to check Copilot\'s work' },
+        { id: 'commit', label: 'Commit Changes', description: 'Use /git-commit to generate commit message' },
+      ],
+    },
+    {
+      id: 'phase7',
+      title: 'Phase 7: Testing and Validation',
+      icon: TestTube,
+      items: [
+        { id: 'functional_testing', label: 'Complete Functional Testing', description: 'Verify core functionality works end-to-end' },
+        { id: 'user_validation', label: 'User Validation', description: 'Get app in front of 1-3 real users' },
+        { id: 'analyze_feedback', label: 'Analyze User Feedback', description: 'Use /analyze-feedback to turn observations into action' },
+      ],
+    },
+  ];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto space-y-4 max-w-6xl">
       <div>
-        <h1 className="text-3xl font-bold text-primary-100 flex items-center gap-3">
+        <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
           <LayoutDashboard className="w-8 h-8 text-primary-400" />
-          Project Dashboard
+          Project Setup Guide
         </h1>
-        <p className="text-primary-400 mt-2">
-          Overview of your project progress and suggested next actions
+        <p className="mt-2 text-primary-400">
+          Interactive checklist following the DougHub Project Setup Guide
         </p>
       </div>
 
-      {/* Next Action Banner */}
-      {nextAction && (
-        <Card className="bg-gradient-to-r from-primary-800 to-primary-900 border-primary-600">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary-700 rounded-xl">
-                <PlayCircle className="w-6 h-6 text-primary-300" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-primary-100">
-                  Suggested: {nextAction.label}
-                </h3>
-                <p className="text-sm text-primary-400">{nextAction.description}</p>
-              </div>
-            </div>
-            <Button onClick={() => onNavigate(nextAction.stage)}>
-              Go to {nextAction.stage.charAt(0).toUpperCase() + nextAction.stage.slice(1)}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
-        </Card>
-      )}
+      <div className="space-y-3">
+        {guideSections.map((section) => {
+          const Icon = section.icon;
+          const isExpanded = expandedSections[section.id];
+          const completedCount = section.items.filter((item) => checkedItems[item.id]).length;
+          const totalCount = section.items.length;
 
-      {/* Overall Progress */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-primary-100 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary-400" />
-            Overall Progress
-          </h2>
-          <span className="text-2xl font-bold text-primary-100">{overallProgress}%</span>
-        </div>
-        <div className="h-3 bg-primary-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-primary-500 via-blue-500 to-green-500 rounded-full transition-all duration-700"
-            style={{ width: `${overallProgress}%` }}
-          />
-        </div>
-      </Card>
-
-      {/* Stage Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stages.map((stage) => {
-          const Icon = stage.icon;
           return (
-            <Card
-              key={stage.id}
-              className={`cursor-pointer transition-all hover:border-primary-500 ${
-                stage.complete ? 'border-green-700/50 bg-green-900/10' : ''
-              }`}
-              onClick={() => onNavigate(stage.id)}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${stage.complete ? 'bg-green-900/50' : 'bg-primary-800'}`}>
-                    <Icon className={`w-5 h-5 ${stage.complete ? 'text-green-400' : 'text-primary-400'}`} />
+            <Card key={section.id} className="overflow-hidden">
+              <button
+                onClick={() => toggleSection(section.id)}
+                className="flex justify-between items-center p-4 w-full transition-colors hover:bg-primary-800/50"
+              >
+                <div className="flex gap-3 items-center">
+                  {isExpanded ? (
+                    <ChevronDown className="w-5 h-5 text-primary-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-primary-400" />
+                  )}
+                  <div className={`p-2 rounded-lg bg-primary-800`}>
+                    <Icon className="w-5 h-5 text-primary-400" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-primary-100">{stage.name}</h3>
-                    <p className="text-xs text-primary-500">{stage.description}</p>
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-primary-100">{section.title}</h3>
+                    <p className="text-xs text-primary-500">
+                      {completedCount}/{totalCount} completed
+                    </p>
                   </div>
                 </div>
-                {stage.complete ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-400" />
-                ) : (
-                  <span className="text-sm font-medium text-primary-400">{stage.progress}%</span>
+                {completedCount === totalCount && completedCount > 0 && (
+                  <div className="flex gap-2 items-center">
+                    <div className="flex justify-center items-center w-6 h-6 rounded-full bg-green-900/50">
+                      <Check className="w-4 h-4 text-green-400" />
+                    </div>
+                  </div>
                 )}
-              </div>
-              
-              <div className="h-1.5 bg-primary-800 rounded-full overflow-hidden mb-2">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    stage.complete ? 'bg-green-500' : 'bg-primary-500'
-                  }`}
-                  style={{ width: `${stage.progress}%` }}
-                />
-              </div>
-              
-              <p className="text-xs text-primary-500">{stage.details}</p>
+              </button>
+
+              {isExpanded && (
+                <div className="px-4 pt-4 pb-4 space-y-2 border-t border-primary-800">
+                  {section.items.map((item) => {
+                    const isChecked = checkedItems[item.id] || false;
+                    return (
+                      <label
+                        key={item.id}
+                        className="flex gap-3 items-start p-3 rounded-lg transition-colors cursor-pointer hover:bg-primary-800/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleCheckbox(item.id)}
+                          className="mt-1 w-4 h-4 rounded border-primary-600 bg-primary-800 text-primary-400 focus:ring-primary-500 focus:ring-2"
+                        />
+                        <div className="flex-1">
+                          <div className={`text-sm font-medium ${isChecked ? 'line-through text-primary-300' : 'text-primary-100'}`}>
+                            {item.label}
+                          </div>
+                          {item.description && (
+                            <div className="mt-1 text-xs text-primary-500">{item.description}</div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
           );
         })}
       </div>
-
-      {/* Tasks Overview */}
-      {tasks.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Current Task */}
-          <Card>
-            <h3 className="text-lg font-semibold text-primary-100 mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-400" />
-              Current Task
-            </h3>
-            {currentTask ? (
-              <div className="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-                <p className="font-medium text-primary-100">{currentTask.title}</p>
-                <Button
-                  variant="ghost"
-                  className="mt-3 text-sm"
-                  onClick={() => onNavigate('workbench')}
-                >
-                  View in Workbench
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </div>
-            ) : (
-              <div className="p-4 bg-primary-800/50 rounded-lg text-center">
-                <Circle className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-                <p className="text-primary-500 text-sm">No task in progress</p>
-                {pendingTasks.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    className="mt-2 text-sm"
-                    onClick={() => onNavigate('workbench')}
-                  >
-                    Start next task
-                  </Button>
-                )}
-              </div>
-            )}
-          </Card>
-
-          {/* Up Next */}
-          <Card>
-            <h3 className="text-lg font-semibold text-primary-100 mb-4 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-              Up Next
-            </h3>
-            {pendingTasks.length > 0 ? (
-              <div className="space-y-2">
-                {pendingTasks.map((task, i) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-3 p-3 bg-primary-800/50 rounded-lg"
-                  >
-                    <span className="w-6 h-6 rounded-full bg-primary-700 flex items-center justify-center text-xs text-primary-400">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm text-primary-200 truncate">{task.title}</span>
-                  </div>
-                ))}
-                {tasks.filter(t => t.status === 'pending').length > 3 && (
-                  <p className="text-xs text-primary-500 text-center pt-2">
-                    +{tasks.filter(t => t.status === 'pending').length - 3} more tasks
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="p-4 bg-primary-800/50 rounded-lg text-center">
-                <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                <p className="text-primary-500 text-sm">All tasks completed!</p>
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* Quick Actions */}
-      <Card>
-        <h3 className="text-lg font-semibold text-primary-100 mb-4">Quick Actions</h3>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => onNavigate('vision')}>
-            <Lightbulb className="w-4 h-4 mr-2" />
-            Edit Vision
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate('strategy')}>
-            <ListChecks className="w-4 h-4 mr-2" />
-            View PRD
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate('workbench')}>
-            <Code2 className="w-4 h-4 mr-2" />
-            Open Workbench
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate('testing')}>
-            <Rocket className="w-4 h-4 mr-2" />
-            Testing Checklist
-          </Button>
-        </div>
-      </Card>
-
-      {/* When to Restart Info */}
-      <Card className="bg-primary-800/30">
-        <h3 className="text-sm font-medium text-primary-300 mb-2">When to Restart Phases</h3>
-        <ul className="text-xs text-primary-500 space-y-1">
-          <li>• <strong>Pivot (new user/problem)</strong> → Restart at Foundation</li>
-          <li>• <strong>Change tech stack</strong> → Restart at Strategy</li>
-          <li>• <strong>Add major features</strong> → Add to PRD, re-parse tasks</li>
-        </ul>
-      </Card>
     </div>
   );
 }
