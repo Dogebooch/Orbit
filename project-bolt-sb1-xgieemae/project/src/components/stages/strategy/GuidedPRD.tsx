@@ -39,6 +39,7 @@ const TECH_OPTIONS = {
     { value: 'supabase', label: 'Supabase', description: 'Backend-as-a-service with Postgres' },
     { value: 'nodejs', label: 'Node.js + Express', description: 'Traditional Node.js server' },
     { value: 'edge', label: 'Edge Functions', description: 'Serverless functions at the edge' },
+    { value: 'tauri', label: 'Tauri (Rust)', description: 'Native desktop app with Rust backend' },
   ],
   database: [
     { value: 'none', label: 'None', description: 'No database needed for this project' },
@@ -268,15 +269,15 @@ ${outOfScope || '- _No items marked as out of scope_'}
           </Button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           {features.map((feature, index) => (
             <div
               key={feature.id}
-              className="bg-primary-800/50 border border-primary-700 rounded-xl overflow-hidden"
+              className="bg-primary-800/50 border border-primary-700 rounded-lg overflow-hidden"
             >
               <button
                 onClick={() => setExpandedFeature(expandedFeature === feature.id ? null : feature.id)}
-                className="w-full flex items-center gap-3 p-4 hover:bg-primary-700/50 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-primary-700/50 transition-colors"
               >
                 <GripVertical className="w-4 h-4 text-primary-500" />
                 <span className="text-primary-300 text-sm font-medium">#{index + 1}</span>
@@ -294,12 +295,12 @@ ${outOfScope || '- _No items marked as out of scope_'}
               </button>
 
               {expandedFeature === feature.id && (
-                <div className="p-4 pt-0 space-y-4 border-t border-primary-700">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-primary-300 mb-2">
-                        Feature Name
-                      </label>
+                <div className="px-3 py-2 space-y-3 border-t border-primary-700">
+                  <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-primary-300 mb-1">
+                      Feature Name
+                    </label>
                       <Input
                         value={feature.name}
                         onChange={(e) => updateFeature(feature.id, { name: e.target.value })}
@@ -308,7 +309,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-primary-300 mb-2">
+                      <label className="block text-xs font-medium text-primary-300 mb-1">
                         Priority
                       </label>
                       <select
@@ -324,7 +325,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-primary-300 mb-2">
+                    <label className="block text-xs font-medium text-primary-300 mb-1">
                       User Story
                     </label>
                     <Textarea
@@ -337,10 +338,10 @@ ${outOfScope || '- _No items marked as out of scope_'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-primary-300 mb-2">
+                    <label className="block text-xs font-medium text-primary-300 mb-1">
                       Acceptance Criteria
                     </label>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {feature.acceptanceCriteria.map((criteria, i) => (
                         <div key={i} className="flex gap-2">
                           <div className="flex items-center gap-2 flex-1">
@@ -374,7 +375,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                   </div>
 
                   {features.length > 1 && (
-                    <div className="flex justify-end pt-2">
+                    <div className="flex justify-end pt-1">
                       <Button
                         variant="ghost"
                         size="sm"
