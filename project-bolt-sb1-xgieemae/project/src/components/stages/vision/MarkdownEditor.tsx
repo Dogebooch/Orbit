@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../../ui';
 import { FileText, RefreshCw } from 'lucide-react';
-import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile } from '../../../utils/markdownUtils';
+import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile, markdownToSuccessMetrics } from '../../../utils/markdownUtils';
 
 interface VisionData {
   problem: string;
@@ -48,12 +48,21 @@ export function MarkdownEditor({
   // Refs to track if the change is from user editing (internal) vs prop updates (external)
   const isInternalVisionChange = useRef(false);
   const isInternalProfileChange = useRef(false);
+  const isInternalMetricsChange = useRef(false);
   const isInitialized = useRef(false);
 
   useEffect(() => {
     // Skip regenerating markdown if the change was from user editing
     if (isInternalVisionChange.current) {
       isInternalVisionChange.current = false;
+      // Still update metrics if vision changed internally (but not if metrics changed internally)
+      if (!isInternalMetricsChange.current) {
+        setMetricsMarkdown(successMetricsToMarkdown(vision));
+      }
+      return;
+    }
+    if (isInternalMetricsChange.current) {
+      isInternalMetricsChange.current = false;
       return;
     }
     setVisionMarkdown(visionToMarkdown(vision));
@@ -84,6 +93,14 @@ export function MarkdownEditor({
     // Mark as internal change so useEffect doesn't overwrite
     isInternalProfileChange.current = true;
     onUserProfileChange({ ...userProfile, ...parsed });
+  };
+
+  const handleMetricsMarkdownChange = (value: string) => {
+    setMetricsMarkdown(value);
+    const parsed = markdownToSuccessMetrics(value);
+    // Mark as internal change so useEffect doesn't overwrite
+    isInternalMetricsChange.current = true;
+    onVisionChange({ ...vision, ...parsed });
   };
 
   const handleRegenerateFromStructure = () => {
@@ -132,12 +149,11 @@ export function MarkdownEditor({
     } else if (activeDoc === 'profile') {
       handleProfileMarkdownChange(value);
     } else {
-      setMetricsMarkdown(value);
+      handleMetricsMarkdownChange(value);
     }
   };
 
   const currentMarkdown = getCurrentMarkdown();
-  const isReadOnly = activeDoc === 'metrics';
 
   return (
     <div className="space-y-4">
@@ -182,7 +198,7 @@ export function MarkdownEditor({
         <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
           <FileText className="w-4 h-4 text-primary-400" />
           <span className="text-sm font-medium text-primary-300">
-            {isReadOnly ? 'Source (Read-only)' : 'Editor'}
+            Editor
           </span>
           <span className="text-xs text-primary-500 ml-auto">
             {currentMarkdown.length} characters
@@ -191,17 +207,9 @@ export function MarkdownEditor({
         <textarea
           value={currentMarkdown}
           onChange={(e) => handleMarkdownChange(e.target.value)}
-          readOnly={isReadOnly}
-          className={`flex-1 w-full p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 overflow-auto ${
-            isReadOnly ? 'opacity-70 cursor-not-allowed' : ''
-          }`}
+          className="flex-1 w-full p-4 bg-primary-900 border border-primary-700 rounded-lg text-primary-100 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 overflow-auto"
           spellCheck={false}
         />
-        {isReadOnly && (
-          <p className="text-xs text-primary-500 mt-2 flex-shrink-0">
-            This file is auto-generated from your vision data. Edit the source fields in the Guided Setup to update.
-          </p>
-        )}
       </div>
 
       <div className="flex items-start gap-2 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">

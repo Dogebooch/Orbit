@@ -332,3 +332,36 @@ export function markdownToUserProfile(markdown: string): Partial<UserProfileData
 
   return profile;
 }
+
+export function markdownToSuccessMetrics(markdown: string): Partial<VisionData> {
+  const vision: Partial<VisionData> = {};
+
+  // Parse target level from the markdown
+  const targetLevelMatch = markdown.match(/## Target Level\s*\n\*\*([^*]+)\*\*/);
+  if (targetLevelMatch) {
+    const labelText = targetLevelMatch[1].trim();
+    // Map label back to key
+    const levelEntry = Object.entries(TARGET_LEVEL_LABELS).find(
+      ([, label]) => label.toLowerCase() === labelText.toLowerCase()
+    );
+    if (levelEntry) {
+      vision.target_level = levelEntry[0];
+    }
+  }
+
+  // Parse success criteria from the markdown
+  const successCriteriaMatch = markdown.match(/## Success Criteria\s*\n([\s\S]*?)(?=\n## |$)/);
+  if (successCriteriaMatch) {
+    const criteriaText = successCriteriaMatch[1].trim();
+    if (criteriaText && criteriaText !== '_Not yet defined_') {
+      // Convert numbered list back to plain text lines
+      const lines = criteriaText.split('\n')
+        .filter(line => line.trim())
+        .map(line => line.replace(/^\d+\.\s*/, '').trim())
+        .filter(line => line);
+      vision.success_metrics = lines.join('\n');
+    }
+  }
+
+  return vision;
+}
