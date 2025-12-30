@@ -34,6 +34,7 @@ import { SessionIndicator } from '../workbench/SessionIndicator';
 import { SessionManager } from '../workbench/SessionManager';
 import { SessionOnboarding } from '../workbench/SessionOnboarding';
 import { WorkflowGuide } from '../workbench/WorkflowGuide';
+import { JarvisAssistant } from '../workbench/JarvisAssistant';
 import { generateAndDownloadClaudeMd } from '../../lib/claudeExport';
 import {
   isSubtask,
@@ -1150,6 +1151,12 @@ Ready to implement the current task with this context in mind.
       {!currentSession && (
         <SessionOnboarding onStartSession={() => setShowSessionManager(true)} />
       )}
+
+      {/* Jarvis AI Assistant */}
+      <JarvisAssistant
+        projectId={currentProject?.id || null}
+        projectName={currentProject?.name}
+      />
 
       {/* Session Warning Modal */}
       {sessionWarning && (

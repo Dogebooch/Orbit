@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Lightbulb, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { Textarea, Input } from '../../ui';
+import { Textarea, Input, AIHelperButton } from '../../ui';
 import type { StepConfig } from './guidedSetupConfig';
+import type { ContentType } from '../../../lib/gemini';
 
 interface StepCardProps {
   step: StepConfig;
@@ -10,12 +11,33 @@ interface StepCardProps {
   showValidation?: boolean;
 }
 
+// Map step fields to ContentType for AI helper
+const getContentType = (step: StepConfig): ContentType => {
+  const fieldMap: Record<string, ContentType> = {
+    problem: 'vision',
+    target_user: 'vision',
+    success_metrics: 'vision',
+    why_software: 'vision',
+    target_level: 'vision',
+    primary_user: 'userProfile',
+    goal: 'userProfile',
+    context: 'userProfile',
+    frustrations: 'userProfile',
+    technical_comfort: 'userProfile',
+    persona_name: 'userProfile',
+    persona_role: 'userProfile',
+    persona_goal: 'userProfile',
+  };
+  return fieldMap[step.field] || fieldMap[step.id] || 'vision';
+};
+
 export function StepCard({ step, value, onChange, showValidation }: StepCardProps) {
   const [showExamples, setShowExamples] = useState(false);
   const [showBestPractices, setShowBestPractices] = useState(false);
 
   const stringValue = typeof value === 'string' ? value : '';
   const objectValue = typeof value === 'object' ? value : {};
+  const contentType = getContentType(step);
 
   const getCharCount = () => {
     if (step.inputType === 'multi-field') {
@@ -37,16 +59,30 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
       .every(sf => objectValue[sf.id] && objectValue[sf.id].length > 0);
   };
 
+  const handleImprove = (improvedContent: string) => {
+    onChange(improvedContent);
+  };
+
   const renderInput = () => {
     if (step.inputType === 'textarea') {
       return (
-        <Textarea
-          value={stringValue}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={step.placeholder}
-          rows={step.rows || 4}
-          className="text-base bg-primary-800 border-primary-600 focus:border-primary-400"
-        />
+        <div className="relative">
+          <Textarea
+            value={stringValue}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={step.placeholder}
+            rows={step.rows || 4}
+            className="text-base bg-primary-800 border-primary-600 focus:border-primary-400 pr-12"
+          />
+          <div className="absolute top-2 right-2">
+            <AIHelperButton
+              content={stringValue}
+              contentType={contentType}
+              onImprove={handleImprove}
+              fieldLabel={step.title.toLowerCase()}
+            />
+          </div>
+        </div>
       );
     }
 
@@ -96,13 +132,23 @@ export function StepCard({ step, value, onChange, showValidation }: StepCardProp
                 )}
               </label>
               {subField.type === 'textarea' ? (
-                <Textarea
-                  value={objectValue[subField.id] || ''}
-                  onChange={(e) => onChange({ ...objectValue, [subField.id]: e.target.value })}
-                  placeholder={subField.placeholder}
-                  rows={subField.rows || 2}
-                  className="text-base bg-primary-800 border-primary-600 focus:border-primary-400"
-                />
+                <div className="relative">
+                  <Textarea
+                    value={objectValue[subField.id] || ''}
+                    onChange={(e) => onChange({ ...objectValue, [subField.id]: e.target.value })}
+                    placeholder={subField.placeholder}
+                    rows={subField.rows || 2}
+                    className="text-base bg-primary-800 border-primary-600 focus:border-primary-400 pr-12"
+                  />
+                  <div className="absolute top-2 right-2">
+                    <AIHelperButton
+                      content={objectValue[subField.id] || ''}
+                      contentType={contentType}
+                      onImprove={(improved) => onChange({ ...objectValue, [subField.id]: improved })}
+                      fieldLabel={subField.label.toLowerCase()}
+                    />
+                  </div>
+                </div>
               ) : (
                 <Input
                   value={objectValue[subField.id] || ''}

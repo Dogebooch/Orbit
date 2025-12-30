@@ -7,7 +7,9 @@ export type ClientMessage =
   | { type: 'config:setWorkingDir'; path: string }
   | { type: 'config:getWorkingDir' }
   | { type: 'config:writeFile'; relativePath: string; content: string }
-  | { type: 'config:createDir'; relativePath: string };
+  | { type: 'config:createDir'; relativePath: string }
+  | { type: 'gemini:send'; prompt: string; context?: string; requestId?: string }
+  | { type: 'gemini:initialize'; projectContext?: ProjectContext };
 
 // Backend -> Frontend messages
 export type ServerMessage =
@@ -19,7 +21,10 @@ export type ServerMessage =
   | { type: 'config:workingDir'; path: string }
   | { type: 'config:writeResult'; success: boolean; path: string; error?: string }
   | { type: 'connection:status'; connected: boolean }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'gemini:response'; response: string; requestId?: string }
+  | { type: 'gemini:error'; error: string; requestId?: string }
+  | { type: 'gemini:status'; status: 'initializing' | 'ready' | 'error' };
 
 // TaskMaster task format (from .taskmaster/tasks/tasks.json)
 export interface TaskMasterTask {
@@ -50,5 +55,16 @@ export interface OrbitTask {
 export interface ServerConfig {
   workingDirectory: string;
   watchEnabled: boolean;
+}
+
+// Project context for Gemini CLI initialization
+export interface ProjectContext {
+  projectName?: string;
+  techStack?: {
+    languages: string[];
+    frameworks: string[];
+  };
+  generatedFiles?: string[];
+  description?: string;
 }
 

@@ -59,6 +59,15 @@ export interface EnhancementResult {
   tokensUsed: number;
 }
 
+export interface EvaluationResult {
+  score: number; // 1-10
+  strengths: string[];
+  weaknesses: string[];
+  overallFeedback: string;
+}
+
+export type ContentType = 'vision' | 'userProfile' | 'prd' | 'feature' | 'userStory' | 'acceptanceCriteria' | 'outOfScope';
+
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -242,8 +251,8 @@ Respond with ONLY the enhanced file content, no explanations or markdown code bl
   /**
    * Get suggestions for improving a PRD or project documentation
    */
-  async getSuggestions(content: string, type: 'prd' | 'vision' | 'userProfile'): Promise<string[]> {
-    const prompts: Record<string, string> = {
+  async getSuggestions(content: string, type: ContentType): Promise<string[]> {
+    const prompts: Record<ContentType, string> = {
       prd: `Review this PRD and suggest 3-5 specific improvements:
 
 ${content}
@@ -255,6 +264,26 @@ ${content}
 
 Respond with a numbered list of actionable suggestions.`,
       userProfile: `Review this user profile and suggest 3-5 ways to make it more detailed and useful:
+
+${content}
+
+Respond with a numbered list of actionable suggestions.`,
+      feature: `Review this feature description and suggest 3-5 improvements:
+
+${content}
+
+Respond with a numbered list of actionable suggestions.`,
+      userStory: `Review this user story and suggest 3-5 ways to make it clearer and more actionable:
+
+${content}
+
+Respond with a numbered list of actionable suggestions.`,
+      acceptanceCriteria: `Review these acceptance criteria and suggest 3-5 improvements to make them more testable and specific:
+
+${content}
+
+Respond with a numbered list of actionable suggestions.`,
+      outOfScope: `Review this out-of-scope section and suggest 3-5 ways to make it clearer:
 
 ${content}
 
@@ -274,6 +303,152 @@ Respond with a numbered list of actionable suggestions.`,
     } catch (error) {
       console.error('Failed to get suggestions:', error);
       return [];
+    }
+  }
+
+  /**
+   * Evaluate writing quality and provide detailed feedback
+   */
+  async evaluateWriting(content: string, type: ContentType): Promise<EvaluationResult> {
+    const typeDescriptions: Record<ContentType, string> = {
+      vision: 'project vision statement',
+      userProfile: 'user profile description',
+      prd: 'product requirements document',
+      feature: 'feature description',
+      userStory: 'user story',
+      acceptanceCriteria: 'acceptance criteria',
+      outOfScope: 'out-of-scope definition',
+    };
+
+    const prompt = `You are an expert product manager and technical writer. Evaluate this ${typeDescriptions[type]} for clarity, completeness, and actionability.
+
+CONTENT TO EVALUATE:
+${content}
+
+Respond in this exact JSON format (no markdown, just JSON):
+{
+  "score": <number 1-10>,
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "overallFeedback": "One paragraph summary of the evaluation"
+}`;
+
+    try {
+      const response = await this.generateContent(prompt);
+      
+      // Parse JSON response
+      const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const result = JSON.parse(cleanedResponse);
+      
+      return {
+        score: Math.min(10, Math.max(1, result.score || 5)),
+        strengths: result.strengths || [],
+        weaknesses: result.weaknesses || [],
+        overallFeedback: result.overallFeedback || 'Unable to provide feedback.',
+      };
+    } catch (error) {
+      console.error('Failed to evaluate writing:', error);
+      return {
+        score: 5,
+        strengths: [],
+        weaknesses: ['Unable to analyze content'],
+        overallFeedback: 'An error occurred while evaluating the content.',
+      };
+    }
+  }
+
+  /**
+   * Auto-improve content by rewriting it with AI enhancements
+   */
+  async improveContent(content: string, type: ContentType): Promise<string> {
+    const typeDescriptions: Record<ContentType, string> = {
+      vision: 'project vision statement',
+      userProfile: 'user profile description',
+      prd: 'product requirements document',
+      feature: 'feature description',
+      userStory: 'user story',
+      acceptanceCriteria: 'acceptance criteria',
+      outOfScope: 'out-of-scope definition',
+    };
+
+    const typeGuidelines: Record<ContentType, string> = {
+      vision: `- Make the problem statement specific and measurable
+- Clearly identify the target user
+- Include concrete success metrics
+- Explain why software is the right solution`,
+      userProfile: `- Create a vivid persona with name and role
+- Describe specific pain points and frustrations
+- Include context about how they work
+- Specify technical comfort level`,
+      prd: `- Use clear, structured sections
+- Include measurable requirements
+- Define acceptance criteria
+- Prioritize features clearly`,
+      feature: `- Start with a clear benefit statement
+- Include the user perspective
+- Make it testable and measurable`,
+      userStory: `- Follow the "As a [user], I want [goal], so that [benefit]" format
+- Be specific about the user type
+- Include clear acceptance criteria`,
+      acceptanceCriteria: `- Make each criterion testable
+- Use "Given/When/Then" format where appropriate
+- Be specific about expected behaviors
+- Include edge cases`,
+      outOfScope: `- Be explicit about what's NOT included
+- Explain briefly why each item is out of scope
+- Reference when items might be added (future versions)`,
+    };
+
+    const prompt = `You are an expert product manager and technical writer. Improve this ${typeDescriptions[type]} while maintaining its core intent.
+
+ORIGINAL CONTENT:
+${content}
+
+GUIDELINES FOR IMPROVEMENT:
+${typeGuidelines[type]}
+
+INSTRUCTIONS:
+1. Keep the original meaning and intent
+2. Improve clarity, specificity, and actionability
+3. Fix any grammatical issues
+4. Make it more professional and compelling
+5. Do NOT add fabricated details - only enhance what's there
+
+Respond with ONLY the improved text, no explanations or markdown formatting.`;
+
+    try {
+      const response = await this.generateContent(prompt);
+      return response.trim();
+    } catch (error) {
+      console.error('Failed to improve content:', error);
+      return content; // Return original on failure
+    }
+  }
+
+  /**
+   * Chat with context for Jarvis assistant
+   */
+  async chat(message: string, context: string, history: { role: 'user' | 'assistant'; content: string }[]): Promise<string> {
+    const historyText = history
+      .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n\n');
+
+    const prompt = `You are Jarvis, an AI assistant for the Orbit Mission Control application. You help users plan and develop their software projects.
+
+PROJECT CONTEXT:
+${context}
+
+${historyText ? `CONVERSATION HISTORY:\n${historyText}\n\n` : ''}USER MESSAGE:
+${message}
+
+Provide a helpful, concise response. If asked about tasks or workflow, give specific actionable advice. If you're unsure about something, say so.`;
+
+    try {
+      const response = await this.generateContent(prompt);
+      return response.trim();
+    } catch (error) {
+      console.error('Chat failed:', error);
+      return 'Sorry, I encountered an error processing your request. Please try again.';
     }
   }
 }

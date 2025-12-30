@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Button } from '../../ui';
+import { Button, AIHelperButton } from '../../ui';
 import { FileText, RefreshCw } from 'lucide-react';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile, markdownToSuccessMetrics } from '../../../utils/markdownUtils';
+import type { ContentType } from '../../../lib/gemini';
 
 interface VisionData {
   problem: string;
@@ -154,6 +155,16 @@ export function MarkdownEditor({
 
   const currentMarkdown = getCurrentMarkdown();
 
+  const getContentType = (): ContentType => {
+    if (activeDoc === 'vision') return 'vision';
+    if (activeDoc === 'profile') return 'userProfile';
+    return 'vision'; // metrics is part of vision
+  };
+
+  const handleAIImprove = (improvedContent: string) => {
+    handleMarkdownChange(improvedContent);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between -mx-6 px-6 py-3 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
@@ -199,9 +210,17 @@ export function MarkdownEditor({
           <span className="text-sm font-medium text-primary-300">
             Editor
           </span>
-          <span className="text-xs text-primary-500 ml-auto">
-            {currentMarkdown.length} characters
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-primary-500">
+              {currentMarkdown.length} characters
+            </span>
+            <AIHelperButton
+              content={currentMarkdown}
+              contentType={getContentType()}
+              onImprove={handleAIImprove}
+              fieldLabel={activeDoc === 'profile' ? 'user profile' : activeDoc === 'metrics' ? 'success metrics' : 'vision'}
+            />
+          </div>
         </div>
         <textarea
           value={currentMarkdown}

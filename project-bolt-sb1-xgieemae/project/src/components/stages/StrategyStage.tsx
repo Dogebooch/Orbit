@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Button, Card, Input, Textarea } from '../ui';
+import { Button, Card, Input, Textarea, AIHelperButton } from '../ui';
 import {
   ListChecks,
   ArrowRight,
@@ -21,13 +21,27 @@ import {
   ExternalLink,
   AlertTriangle,
   Lightbulb,
-  GitBranch,
-  Search,
-  BookOpen,
   Folder,
+  FileText,
+  Download,
+  Eye,
+  Package,
+  Settings,
+  Zap,
 } from 'lucide-react';
-import { generateBoltPrompt, validateBoltPromptData } from '../../lib/boltPromptGenerator';
-import { TaskParser } from './strategy/TaskParser';
+import {
+  generatePRDPrompt,
+  generateBoltMetaPrompt,
+  generateTaskmasterConfig,
+  generateMCPConfig,
+  generatePRDPlaceholder,
+  generateVisionMarkdown,
+  generateUserProfileMarkdown,
+  downloadFile,
+  downloadJSON,
+  type ProjectContext,
+} from '../../lib/launchFileGenerators';
+import { generateClaudeMd, fetchProjectData } from '../../lib/claudeExport';
 
 // Types
 interface VisionData {
@@ -73,19 +87,18 @@ interface ParsedTask {
   selected: boolean;
 }
 
-type StrategyStep = 'tech_stack' | 'features' | 'out_of_scope' | 'choose_path';
-type LaunchPath = 'bolt' | 'local' | null;
+type StrategyStep = 'tech_stack' | 'features' | 'out_of_scope' | 'prepare_launch';
 
 const STEPS: { id: StrategyStep; label: string; description: string }[] = [
   { id: 'tech_stack', label: 'Tech Stack', description: 'Choose your technology stack' },
   { id: 'features', label: 'Features', description: 'Define your MVP features' },
   { id: 'out_of_scope', label: 'Out of Scope', description: 'What NOT to build' },
-  { id: 'choose_path', label: 'Choose Your Path', description: 'How to build it' },
+  { id: 'prepare_launch', label: 'Prepare for Launch', description: 'Generate files and prompts' },
 ];
 
 const TECH_OPTIONS = {
   frontend: [
-    { value: 'react-vite', label: 'React + Vite', description: 'Fast, modern React setup with Vite bundler' },
+    { value: 'react-vite', label: 'React + TypeScript + Vite', description: 'Fast, modern React setup with Vite bundler' },
     { value: 'nextjs', label: 'Next.js', description: 'Full-stack React with SSR and API routes' },
     { value: 'vue', label: 'Vue 3', description: 'Progressive JavaScript framework' },
     { value: 'vanilla', label: 'Vanilla JS', description: 'Plain JavaScript, no framework' },
@@ -99,13 +112,15 @@ const TECH_OPTIONS = {
   database: [
     { value: 'none', label: 'None', description: 'No database needed for this project' },
     { value: 'supabase-postgres', label: 'Supabase (Postgres)', description: 'Hosted PostgreSQL with realtime' },
-    { value: 'sqlite', label: 'SQLite', description: 'Local file-based database' },
+    { value: 'sqlite-better', label: 'SQLite (better-sqlite3)', description: 'Fast native SQLite for Node.js/Electron' },
+    { value: 'sqlite-sqljs', label: 'SQLite (sql.js)', description: 'SQLite compiled to WebAssembly for browsers' },
     { value: 'firebase', label: 'Firebase', description: 'NoSQL document database' },
   ],
   deployment: [
     { value: 'vercel', label: 'Vercel', description: 'Best for Next.js and React apps' },
     { value: 'netlify', label: 'Netlify', description: 'Great for static sites and serverless' },
     { value: 'railway', label: 'Railway', description: 'Good for full-stack apps with databases' },
+    { value: 'electron', label: 'Electron', description: 'Desktop app with native OS integration' },
     { value: 'local', label: 'Local only', description: 'Development only, no deployment' },
   ],
 };
@@ -126,6 +141,24 @@ export function StrategyStage() {
     additionalTools: '',
   });
   
+  // "Started in Bolt" checkbox state
+  const [startedInBolt, setStartedInBolt] = useState(false);
+  
+  // Handle "Started in Bolt" checkbox change
+  const handleBoltCheckboxChange = (checked: boolean) => {
+    setStartedInBolt(checked);
+    if (checked) {
+      // Auto-populate with Bolt defaults
+      setTechStack({
+        frontend: 'react-vite',
+        backend: 'none',
+        database: 'none',
+        deployment: 'local',
+        additionalTools: 'TailwindCSS, Shadcn UI',
+      });
+    }
+  };
+  
   // Features state
   const [features, setFeatures] = useState<Feature[]>([
     { id: '1', name: '', userStory: '', priority: 'must_have', acceptanceCriteria: [''] },
@@ -135,15 +168,13 @@ export function StrategyStage() {
   // Out of scope state
   const [outOfScope, setOutOfScope] = useState('');
   
-  // Path selection state
-  const [selectedPath, setSelectedPath] = useState<LaunchPath>(null);
+  // Prepare for Launch state
   const [copied, setCopied] = useState<string | null>(null);
-  const [showTaskmasterSetup, setShowTaskmasterSetup] = useState(false);
+  const [showQuickStart, setShowQuickStart] = useState(true);
+  const [previewContent, setPreviewContent] = useState<{ title: string; content: string } | null>(null);
   
   // PRD state
   const [prdContent, setPrdContent] = useState('');
-  const [existingTaskCount, setExistingTaskCount] = useState(0);
-  const [tasksGenerated, setTasksGenerated] = useState(false);
 
   useEffect(() => {
     if (currentProject) {
@@ -187,14 +218,6 @@ export function StrategyStage() {
       setPrdContent(prdData.content || '');
       setOutOfScope(prdData.out_of_scope || '');
     }
-
-    // Load existing task count
-    const { data: taskData } = await supabase
-      .from('tasks')
-      .select('id')
-      .eq('project_id', currentProject.id);
-
-    setExistingTaskCount(taskData?.length ?? 0);
   };
 
   // Feature management
@@ -352,8 +375,8 @@ ${outOfScope || '- _No items marked as out of scope_'}
     }
   }, [currentProject, generatePRDContent, outOfScope]);
 
-  // Generate Bolt prompt
-  const boltPromptData = {
+  // Generate project context for launch file generators
+  const projectContext: ProjectContext = {
     projectName: currentProject?.name || 'My Project',
     vision: {
       problem: vision.problem,
@@ -368,24 +391,16 @@ ${outOfScope || '- _No items marked as out of scope_'}
       context: userProfile.context || '',
       frustrations: userProfile.frustrations || '',
       technical_comfort: userProfile.technical_comfort || 'medium',
-      time_constraints: '',
       persona_name: userProfile.persona_name || '',
       persona_role: userProfile.persona_role || '',
     },
-    features: features.filter(f => f.name).map(f => ({
-      name: f.name,
-      userStory: f.userStory,
-      acceptanceCriteria: f.acceptanceCriteria.filter(ac => ac.trim() !== ''),
-      priority: f.priority === 'must_have' ? 'must-have' as const : 
-                f.priority === 'should_have' ? 'should-have' as const : 
-                'nice-to-have' as const,
-    })),
+    features,
     techStack,
     outOfScope,
   };
 
-  const validation = validateBoltPromptData(boltPromptData);
-  const generatedBoltPrompt = validation.valid ? generateBoltPrompt(boltPromptData) : '';
+  // Check if we have minimum required data
+  const hasRequiredData = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
 
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
@@ -414,41 +429,6 @@ ${outOfScope || '- _No items marked as out of scope_'}
     }
   };
 
-  // Task generation
-  const handleTasksGenerated = async (tasks: ParsedTask[]) => {
-    if (!currentProject || tasks.length === 0) return;
-
-    const priorityMap = { high: 1, medium: 2, low: 3 };
-    
-    const { data: existingTasks } = await supabase
-      .from('tasks')
-      .select('order_index')
-      .eq('project_id', currentProject.id)
-      .order('order_index', { ascending: false })
-      .limit(1);
-
-    const startIndex = (existingTasks?.[0]?.order_index ?? -1) + 1;
-
-    const tasksToInsert = tasks.map((task, index) => ({
-      project_id: currentProject.id,
-      title: task.title,
-      description: task.description,
-      status: 'pending' as const,
-      priority: priorityMap[task.priority],
-      acceptance_criteria: task.acceptanceCriteria.join('\n'),
-      notes: '',
-      order_index: startIndex + index,
-    }));
-
-    const { error } = await supabase.from('tasks').insert(tasksToInsert);
-
-    if (!error) {
-      setExistingTaskCount(prev => prev + tasks.length);
-      setTasksGenerated(true);
-      setTimeout(() => setTasksGenerated(false), 3000);
-    }
-  };
-
   const handleContinue = async () => {
     await savePRD();
     await supabase
@@ -467,19 +447,19 @@ ${outOfScope || '- _No items marked as out of scope_'}
   const hasValidFeatures = features.some(f => f.name.trim() !== '');
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="mx-auto space-y-8 max-w-5xl">
       <div>
-        <h1 className="text-3xl font-bold text-primary-100 flex items-center gap-3">
+        <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
           <ListChecks className="w-8 h-8 text-primary-400" />
           Strategy: PRD & Launch
         </h1>
-        <p className="text-primary-400 mt-2">
+        <p className="mt-2 text-primary-400">
           Define your tech stack, features, and choose how to build your project.
         </p>
       </div>
 
       {/* Step Progress */}
-      <div className="flex items-center gap-2">
+      <div className="flex gap-2 items-center">
         {STEPS.map((step, index) => {
           const isActive = currentStep === step.id;
           const isPast = currentStepIndex > index;
@@ -490,16 +470,16 @@ ${outOfScope || '- _No items marked as out of scope_'}
                 onClick={() => goToStep(step.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                   isActive
-                    ? 'bg-primary-600 text-white'
+                    ? 'text-white bg-primary-600'
                     : isPast
-                    ? 'bg-green-900/30 text-green-400 border border-green-700/50'
+                    ? 'text-green-400 border bg-green-900/30 border-green-700/50'
                     : 'bg-primary-800/50 text-primary-400 hover:bg-primary-800'
                 }`}
               >
                 {isPast ? (
                   <CheckCircle className="w-4 h-4" />
                 ) : (
-                  <span className="w-5 h-5 rounded-full bg-primary-700 flex items-center justify-center text-xs">
+                  <span className="flex justify-center items-center w-5 h-5 text-xs rounded-full bg-primary-700">
                     {index + 1}
                   </span>
                 )}
@@ -519,16 +499,33 @@ ${outOfScope || '- _No items marked as out of scope_'}
         {currentStep === 'tech_stack' && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold text-primary-100 mb-2">Technical Stack</h2>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Technical Stack</h2>
               <p className="text-sm text-primary-400">
                 Choose your technology stack. These choices affect how AI generates code and what patterns it uses.
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            {/* "Started in Bolt" checkbox */}
+            <div className="flex items-center gap-2 p-3 bg-primary-800/50 rounded-lg border border-primary-700">
+              <input
+                type="checkbox"
+                id="started-in-bolt"
+                checked={startedInBolt}
+                onChange={(e) => handleBoltCheckboxChange(e.target.checked)}
+                className="w-4 h-4 rounded border-primary-600 bg-primary-900 text-primary-500 focus:ring-2 focus:ring-primary-500"
+              />
+              <label htmlFor="started-in-bolt" className="text-sm text-primary-200 cursor-pointer">
+                Started in Bolt.new
+              </label>
+              <span className="text-xs text-primary-400 ml-2">
+                (Auto-populates recommended defaults for Bolt projects)
+              </span>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               {(Object.keys(TECH_OPTIONS) as Array<keyof typeof TECH_OPTIONS>).map((category) => (
                 <div key={category}>
-                  <label className="block text-sm font-medium text-primary-300 mb-2 capitalize">
+                  <label className="block mb-2 text-sm font-medium capitalize text-primary-300">
                     {category === 'additionalTools' ? 'Additional Tools' : category}
                   </label>
                   {category === 'additionalTools' ? (
@@ -560,22 +557,22 @@ ${outOfScope || '- _No items marked as out of scope_'}
         {/* Step 2: Features */}
         {currentStep === 'features' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-semibold text-primary-100 mb-2">Features</h2>
+                <h2 className="mb-2 text-xl font-semibold text-primary-100">Features</h2>
                 <p className="text-sm text-primary-400">
                   Define features with user stories and acceptance criteria. Prioritize for MVP.
                 </p>
               </div>
               <Button onClick={addFeature} variant="secondary" size="sm">
-                <Plus className="w-4 h-4 mr-1" />
+                <Plus className="mr-1 w-4 h-4" />
                 Add Feature
               </Button>
             </div>
 
             {/* Feature Table */}
-            <div className="bg-primary-800/30 border border-primary-700 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-primary-800/50 border-b border-primary-700 text-xs font-medium text-primary-400">
+            <div className="overflow-hidden rounded-lg border bg-primary-800/30 border-primary-700">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium border-b bg-primary-800/50 border-primary-700 text-primary-400">
                 <div className="col-span-1">#</div>
                 <div className="col-span-3">Name</div>
                 <div className="col-span-2">Priority</div>
@@ -586,8 +583,8 @@ ${outOfScope || '- _No items marked as out of scope_'}
 
               {features.map((feature, index) => (
                 <div key={feature.id} className="border-b border-primary-700/50 last:border-b-0">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
-                    <div className="col-span-1 text-sm text-primary-400 font-medium">
+                  <div className="grid grid-cols-12 gap-2 items-center px-3 py-2">
+                    <div className="col-span-1 text-sm font-medium text-primary-400">
                       {index + 1}
                     </div>
                     <div className="col-span-3">
@@ -596,7 +593,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                         value={feature.name}
                         onChange={(e) => updateFeature(feature.id, { name: e.target.value })}
                         placeholder="Feature name"
-                        className="w-full bg-transparent border-0 border-b border-transparent hover:border-primary-600 focus:border-primary-500 text-sm text-primary-100 px-0 py-1 focus:outline-none focus:ring-0 placeholder:text-primary-600"
+                        className="px-0 py-1 w-full text-sm bg-transparent border-0 border-b border-transparent hover:border-primary-600 focus:border-primary-500 text-primary-100 focus:outline-none focus:ring-0 placeholder:text-primary-600"
                       />
                     </div>
                     <div className="col-span-2">
@@ -610,13 +607,19 @@ ${outOfScope || '- _No items marked as out of scope_'}
                         <option value="nice_to_have" className="bg-primary-900 text-primary-100">Nice to Have</option>
                       </select>
                     </div>
-                    <div className="col-span-4">
+                    <div className="col-span-4 flex items-center gap-1">
                       <input
                         type="text"
                         value={feature.userStory}
                         onChange={(e) => updateFeature(feature.id, { userStory: e.target.value })}
                         placeholder="As a user, I want..."
-                        className="w-full bg-transparent border-0 border-b border-transparent hover:border-primary-600 focus:border-primary-500 text-sm text-primary-300 px-0 py-1 focus:outline-none focus:ring-0 placeholder:text-primary-600"
+                        className="px-0 py-1 w-full text-sm bg-transparent border-0 border-b border-transparent hover:border-primary-600 focus:border-primary-500 text-primary-300 focus:outline-none focus:ring-0 placeholder:text-primary-600"
+                      />
+                      <AIHelperButton
+                        content={feature.userStory}
+                        contentType="userStory"
+                        onImprove={(improved) => updateFeature(feature.id, { userStory: improved })}
+                        fieldLabel="user story"
                       />
                     </div>
                     <div className="col-span-1 text-center">
@@ -641,7 +644,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                       {features.length > 1 && (
                         <button
                           onClick={() => removeFeature(feature.id)}
-                          className="p-1 text-primary-500 hover:text-red-400 transition-colors"
+                          className="p-1 transition-colors text-primary-500 hover:text-red-400"
                           title="Remove feature"
                         >
                           <X className="w-4 h-4" />
@@ -652,25 +655,25 @@ ${outOfScope || '- _No items marked as out of scope_'}
 
                   {/* Expanded Acceptance Criteria */}
                   {expandedFeature === feature.id && (
-                    <div className="px-3 pb-3 pt-1 bg-primary-800/30">
+                    <div className="px-3 pt-1 pb-3 bg-primary-800/30">
                       <div className="pl-6 space-y-1">
-                        <label className="block text-xs font-medium text-primary-400 mb-2">
+                        <label className="block mb-2 text-xs font-medium text-primary-400">
                           Acceptance Criteria
                         </label>
                         {feature.acceptanceCriteria.map((criteria, i) => (
                           <div key={i} className="flex gap-2 items-center">
-                            <CheckCircle2 className="w-3 h-3 text-primary-500 flex-shrink-0" />
+                            <CheckCircle2 className="flex-shrink-0 w-3 h-3 text-primary-500" />
                             <input
                               type="text"
                               value={criteria}
                               onChange={(e) => updateAcceptanceCriteria(feature.id, i, e.target.value)}
                               placeholder="User can..."
-                              className="flex-1 bg-primary-900/50 border border-primary-700 rounded px-2 py-1 text-sm text-primary-200 focus:outline-none focus:ring-1 focus:ring-primary-500 placeholder:text-primary-600"
+                              className="flex-1 px-2 py-1 text-sm rounded border bg-primary-900/50 border-primary-700 text-primary-200 focus:outline-none focus:ring-1 focus:ring-primary-500 placeholder:text-primary-600"
                             />
                             {feature.acceptanceCriteria.length > 1 && (
                               <button
                                 onClick={() => removeAcceptanceCriteria(feature.id, i)}
-                                className="p-1 text-primary-500 hover:text-red-400 transition-colors"
+                                className="p-1 transition-colors text-primary-500 hover:text-red-400"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -679,7 +682,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                         ))}
                         <button
                           onClick={() => addAcceptanceCriteria(feature.id)}
-                          className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 mt-2"
+                          className="flex gap-1 items-center mt-2 text-xs text-primary-400 hover:text-primary-300"
                         >
                           <Plus className="w-3 h-3" />
                           Add criteria
@@ -696,11 +699,19 @@ ${outOfScope || '- _No items marked as out of scope_'}
         {/* Step 3: Out of Scope */}
         {currentStep === 'out_of_scope' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold text-primary-100 mb-2">Out of Scope (MVP)</h2>
-              <p className="text-sm text-primary-400">
-                Explicitly list what you're NOT building for MVP. This helps AI stay focused and prevents scope creep.
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="mb-2 text-xl font-semibold text-primary-100">Out of Scope (MVP)</h2>
+                <p className="text-sm text-primary-400">
+                  Explicitly list what you're NOT building for MVP. This helps AI stay focused and prevents scope creep.
+                </p>
+              </div>
+              <AIHelperButton
+                content={outOfScope}
+                contentType="outOfScope"
+                onImprove={(improved) => setOutOfScope(improved)}
+                fieldLabel="out of scope"
+              />
             </div>
 
             <Textarea
@@ -711,11 +722,11 @@ ${outOfScope || '- _No items marked as out of scope_'}
               className="bg-primary-800"
             />
 
-            <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
-              <div className="flex items-start gap-3">
+            <div className="p-4 rounded-lg border bg-amber-900/20 border-amber-700/50">
+              <div className="flex gap-3 items-start">
                 <Lightbulb className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="font-medium text-amber-300 mb-1">Why This Matters</h4>
+                  <h4 className="mb-1 font-medium text-amber-300">Why This Matters</h4>
                   <p className="text-sm text-amber-200/80">
                     Being explicit about what you're NOT building is just as important as defining what you are building.
                     It helps AI focus on the core features and prevents unnecessary complexity.
@@ -726,374 +737,492 @@ ${outOfScope || '- _No items marked as out of scope_'}
           </div>
         )}
 
-        {/* Step 4: Choose Your Path */}
-        {currentStep === 'choose_path' && (
+        {/* Step 4: Prepare for Launch */}
+        {currentStep === 'prepare_launch' && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold text-primary-100 mb-2">Choose Your Path</h2>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Prepare for Launch</h2>
               <p className="text-sm text-primary-400">
-                How would you like to build your project?
+                Generate the prompts and files you need to build your project with AI.
               </p>
             </div>
 
-            {/* Validation Errors */}
-            {!validation.valid && (
-              <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
-                <div className="flex items-start gap-3">
+            {/* Validation Warning */}
+            {!hasRequiredData && (
+              <div className="p-4 rounded-lg border bg-amber-900/20 border-amber-700/50">
+                <div className="flex gap-3 items-start">
                   <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <h4 className="font-medium text-amber-300 mb-2">Complete Required Fields</h4>
-                    <ul className="text-sm text-amber-200/80 space-y-1">
-                      {validation.errors.map((error, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <span className="text-amber-400">•</span>
-                          <span>{error}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <h4 className="mb-2 font-medium text-amber-300">Complete Required Fields</h4>
+                    <p className="text-sm text-amber-200/80">
+                      Go back to the Foundation tab and complete: Problem Statement, Target User, Primary User, and User Goal.
+                    </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Path Selection */}
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Bolt.new Path */}
+            {/* Quick Start Guide (Collapsible) */}
+            <div className="overflow-hidden rounded-xl border border-primary-700">
               <button
-                onClick={() => setSelectedPath('bolt')}
-                className={`p-6 rounded-xl border-2 text-left transition-all ${
-                  selectedPath === 'bolt'
-                    ? 'border-purple-500 bg-purple-900/20'
-                    : 'border-primary-700 bg-primary-800/30 hover:border-primary-600'
-                }`}
+                onClick={() => setShowQuickStart(!showQuickStart)}
+                className="flex justify-between items-center p-4 w-full bg-gradient-to-r transition-colors from-purple-900/30 to-cyan-900/30 hover:from-purple-900/40 hover:to-cyan-900/40"
               >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl">
-                    <Rocket className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-primary-100">Bolt.new</h3>
-                      <span className="text-[10px] px-2 py-0.5 bg-purple-600/30 border border-purple-500/50 rounded-full text-purple-300">
-                        Recommended
-                      </span>
-                    </div>
-                    <p className="text-sm text-primary-400">
-                      Start in Bolt.new with AI-assisted scaffolding and live preview. Best for new projects.
-                    </p>
-                  </div>
-                  {selectedPath === 'bolt' && (
-                    <CheckCircle className="w-5 h-5 text-purple-400" />
-                  )}
+                <div className="flex gap-3 items-center">
+                  <Lightbulb className="w-5 h-5 text-amber-400" />
+                  <span className="font-medium text-primary-100">Quick Start Guide - Vibe Coding Workflow</span>
                 </div>
+                {showQuickStart ? (
+                  <ChevronUp className="w-5 h-5 text-primary-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-primary-400" />
+                )}
               </button>
 
-              {/* Local + TaskMaster Path */}
-              <button
-                onClick={() => setSelectedPath('local')}
-                className={`p-6 rounded-xl border-2 text-left transition-all ${
-                  selectedPath === 'local'
-                    ? 'border-cyan-500 bg-cyan-900/20'
-                    : 'border-primary-700 bg-primary-800/30 hover:border-primary-600'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl">
-                    <Terminal className="w-6 h-6 text-white" />
+              {showQuickStart && (
+                <div className="p-4 space-y-3 bg-primary-800/30 animate-fade-in">
+                  <div className="grid gap-3 text-center md:grid-cols-5">
+                    <div className="p-3 rounded-lg bg-primary-900/50">
+                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">1</div>
+                      <p className="text-xs text-primary-300">Copy PRD Prompt → Paste in Claude</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-primary-900/50">
+                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">2</div>
+                      <p className="text-xs text-primary-300">Copy Bolt Prompt → Paste in Claude</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-primary-900/50">
+                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-purple-300 rounded-full bg-purple-600/30">3</div>
+                      <p className="text-xs text-primary-300">Paste generated prompt in Bolt.new</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-primary-900/50">
+                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-cyan-300 rounded-full bg-cyan-600/30">4</div>
+                      <p className="text-xs text-primary-300">Download project locally</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-primary-900/50">
+                      <div className="flex justify-center items-center mx-auto mb-2 w-8 h-8 font-bold text-cyan-300 rounded-full bg-cyan-600/30">5</div>
+                      <p className="text-xs text-primary-300">Use TaskMaster + Copilot</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-primary-100 mb-2">Local + TaskMaster</h3>
-                    <p className="text-sm text-primary-400">
-                      Generate a PRD and use TaskMaster AI with Claude Code locally. Best if you already have a codebase.
-                    </p>
-                  </div>
-                  {selectedPath === 'local' && (
-                    <CheckCircle className="w-5 h-5 text-cyan-400" />
-                  )}
                 </div>
-              </button>
+              )}
             </div>
 
-            {/* Bolt.new Content */}
-            {selectedPath === 'bolt' && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-purple-200 mb-4 flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-purple-400" />
-                    Your Bolt.new MVP Prompt
-                  </h3>
-                  
-                  {generatedBoltPrompt ? (
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <textarea
-                          value={generatedBoltPrompt}
-                          readOnly
-                          className="w-full h-64 bg-primary-900 border border-primary-700 rounded-lg p-4 text-sm text-primary-200 font-mono resize-none focus:outline-none"
-                        />
-                        <div className="absolute top-3 right-3 flex gap-2">
-                          <Button
-                            onClick={() => copyToClipboard(generatedBoltPrompt, 'bolt-prompt')}
-                            variant="secondary"
-                            size="sm"
-                          >
-                            {copied === 'bolt-prompt' ? (
-                              <>
-                                <Check className="w-4 h-4 mr-1" />
-                                Copied!
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-4 h-4 mr-1" />
-                                Copy
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-3">
-                        <Button
-                          onClick={() => window.open('https://bolt.new', '_blank')}
-                          className="bg-purple-600 hover:bg-purple-500"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Open Bolt.new
-                        </Button>
-                        <p className="text-sm text-purple-300/70 flex items-center">
-                          Copy the prompt, then paste it into Claude Code in Bolt.new
-                        </p>
-                      </div>
+            {/* Section A: AI Prompts */}
+            <div className="space-y-4">
+              <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                AI Prompts
+                <span className="ml-2 text-xs font-normal text-primary-400">Copy & paste into ChatGPT or Claude</span>
+              </h3>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* PRD Generator Prompt */}
+                <div className="p-4 rounded-xl border bg-purple-900/20 border-purple-700/50">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="flex gap-2 items-center font-medium text-purple-200">
+                        <FileText className="w-4 h-4 text-purple-400" />
+                        PRD Generator Prompt
+                      </h4>
+                      <p className="mt-1 text-xs text-purple-300/70">
+                        Generates a detailed PRD for TaskMaster
+                      </p>
                     </div>
-                  ) : (
-                    <p className="text-sm text-purple-300/70">
-                      Complete the required fields above to generate your prompt.
-                    </p>
-                  )}
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: 'PRD Generator Prompt', 
+                          content: generatePRDPrompt(projectContext) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                        disabled={!hasRequiredData}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => copyToClipboard(generatePRDPrompt(projectContext), 'prd-prompt')}
+                        variant="secondary"
+                        size="sm"
+                        disabled={!hasRequiredData}
+                      >
+                        {copied === 'prd-prompt' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-purple-200/60">
+                    Save the AI's output as <code className="px-1 rounded bg-purple-900/50">scripts/prd.txt</code>
+                  </p>
+                </div>
+
+                {/* Bolt Meta-Prompt */}
+                <div className="p-4 rounded-xl border bg-cyan-900/20 border-cyan-700/50">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="flex gap-2 items-center font-medium text-cyan-200">
+                        <Rocket className="w-4 h-4 text-cyan-400" />
+                        Bolt Prompt Generator
+                      </h4>
+                      <p className="mt-1 text-xs text-cyan-300/70">
+                        Creates an optimized prompt for Bolt.new
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: 'Bolt Prompt Generator', 
+                          content: generateBoltMetaPrompt(projectContext) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                        disabled={!hasRequiredData}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => copyToClipboard(generateBoltMetaPrompt(projectContext), 'bolt-meta')}
+                        variant="secondary"
+                        size="sm"
+                        disabled={!hasRequiredData}
+                      >
+                        {copied === 'bolt-meta' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      onClick={() => window.open('https://bolt.new', '_blank')}
+                      size="sm"
+                      className="text-xs bg-cyan-600 hover:bg-cyan-500"
+                    >
+                      <ExternalLink className="mr-1 w-3 h-3" />
+                      Open Bolt.new
+                    </Button>
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Local + TaskMaster Content */}
-            {selectedPath === 'local' && (
-              <div className="space-y-4 animate-fade-in">
-                {/* PRD Display */}
-                <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-cyan-200 flex items-center gap-2">
-                      <ListChecks className="w-5 h-5 text-cyan-400" />
-                      Generated PRD
-                    </h3>
-                    <div className="flex gap-2">
+            {/* Section B: Project Files */}
+            <div className="space-y-4">
+              <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
+                <FileText className="w-5 h-5 text-green-400" />
+                Project Files
+                <span className="ml-2 text-xs font-normal text-primary-400">Download for your project</span>
+              </h3>
+
+              <div className="p-4 rounded-xl border bg-primary-800/30 border-primary-700">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {/* CLAUDE.md */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">CLAUDE.md</span>
+                        <p className="text-xs text-primary-500">Project root</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
                       <Button
-                        onClick={() => copyToClipboard(generatePRDContent(), 'prd')}
+                        onClick={async () => {
+                          if (currentProject) {
+                            const data = await fetchProjectData(currentProject.id);
+                            if (data) {
+                              setPreviewContent({ title: 'CLAUDE.md', content: generateClaudeMd(data) });
+                            }
+                          }
+                        }}
                         variant="ghost"
                         size="sm"
                       >
-                        {copied === 'prd' ? (
-                          <>
-                            <Check className="w-4 h-4 mr-1" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 mr-1" />
-                            Copy
-                          </>
-                        )}
+                        <Eye className="w-4 h-4" />
                       </Button>
-                      <Button onClick={savePRD} loading={saving} size="sm">
-                        Save PRD
+                      <Button
+                        onClick={async () => {
+                          if (currentProject) {
+                            const data = await fetchProjectData(currentProject.id);
+                            if (data) {
+                              downloadFile(generateClaudeMd(data), 'CLAUDE.md');
+                            }
+                          }
+                        }}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
-                  
-                  <textarea
-                    value={generatePRDContent()}
-                    readOnly
-                    className="w-full h-48 bg-primary-900 border border-primary-700 rounded-lg p-4 text-sm text-primary-200 font-mono resize-none focus:outline-none"
-                  />
+
+                  {/* 0_vision.md */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <FileText className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">0_vision.md</span>
+                        <p className="text-xs text-primary-500">Project root</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: '0_vision.md', 
+                          content: generateVisionMarkdown(projectContext.vision, projectContext.projectName) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => downloadFile(
+                          generateVisionMarkdown(projectContext.vision, projectContext.projectName), 
+                          '0_vision.md'
+                        )}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 1_user_profile.md */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <FileText className="w-4 h-4 text-blue-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">1_user_profile.md</span>
+                        <p className="text-xs text-primary-500">Project root</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: '1_user_profile.md', 
+                          content: generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => downloadFile(
+                          generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName), 
+                          '1_user_profile.md'
+                        )}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section C: TaskMaster Setup Files */}
+            <div className="space-y-4">
+              <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
+                <Settings className="w-5 h-5 text-cyan-400" />
+                TaskMaster Setup
+                <span className="ml-2 text-xs font-normal text-primary-400">For local development with Claude Code</span>
+              </h3>
+
+              <div className="p-4 rounded-xl border bg-cyan-900/20 border-cyan-700/50">
+                <div className="grid gap-3 mb-4 md:grid-cols-2">
+                  {/* .taskmaster/config.json */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <Terminal className="w-4 h-4 text-cyan-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">.taskmaster/config.json</span>
+                        <p className="text-xs text-primary-500">.taskmaster/ folder</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: '.taskmaster/config.json', 
+                          content: generateTaskmasterConfig(projectContext.projectName) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => downloadJSON(
+                          generateTaskmasterConfig(projectContext.projectName), 
+                          'config.json'
+                        )}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* .mcp.json */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">.mcp.json</span>
+                        <p className="text-xs text-primary-500">Project root</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: '.mcp.json', 
+                          content: generateMCPConfig() 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => downloadJSON(generateMCPConfig(), '.mcp.json')}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* scripts/prd.txt template */}
+                  <div className="flex justify-between items-center p-3 rounded-lg bg-primary-900/50">
+                    <div className="flex gap-2 items-center">
+                      <ListChecks className="w-4 h-4 text-green-400" />
+                      <div>
+                        <span className="text-sm text-primary-200">scripts/prd.txt</span>
+                        <p className="text-xs text-primary-500">scripts/ folder (template)</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => setPreviewContent({ 
+                          title: 'scripts/prd.txt (template)', 
+                          content: generatePRDPlaceholder(projectContext.projectName) 
+                        })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => downloadFile(
+                          generatePRDPlaceholder(projectContext.projectName), 
+                          'prd.txt'
+                        )}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Download All as ZIP */}
+                  <div className="flex justify-center items-center p-3 bg-gradient-to-r rounded-lg border from-purple-900/30 to-cyan-900/30 border-primary-600/50">
+                    <Button
+                      onClick={async () => {
+                        const JSZip = (await import('jszip')).default;
+                        const zip = new JSZip();
+                        
+                        // Add files
+                        if (currentProject) {
+                          const projectData = await fetchProjectData(currentProject.id);
+                          if (projectData) {
+                            zip.file('CLAUDE.md', generateClaudeMd(projectData));
+                          }
+                        }
+                        zip.file('0_vision.md', generateVisionMarkdown(projectContext.vision, projectContext.projectName));
+                        zip.file('1_user_profile.md', generateUserProfileMarkdown(projectContext.userProfile, projectContext.projectName));
+                        
+                        // TaskMaster files
+                        const taskmaster = zip.folder('.taskmaster');
+                        taskmaster?.file('config.json', generateTaskmasterConfig(projectContext.projectName));
+                        zip.file('.mcp.json', generateMCPConfig());
+                        
+                        const scripts = zip.folder('scripts');
+                        scripts?.file('prd.txt', generatePRDPlaceholder(projectContext.projectName));
+                        
+                        // Generate and download
+                        const blob = await zip.generateAsync({ type: 'blob' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${projectContext.projectName.replace(/\s+/g, '-').toLowerCase()}-launch-files.zip`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500"
+                    >
+                      <Package className="mr-2 w-4 h-4" />
+                      Download All as ZIP
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Task Parser */}
-                <TaskParser
-                  prdContent={generatePRDContent()}
-                  onTasksGenerated={handleTasksGenerated}
-                  existingTaskCount={existingTaskCount}
-                />
-
-                {/* Success message */}
-                {tasksGenerated && (
-                  <div className="p-4 bg-green-900/20 border border-green-700/50 rounded-lg flex items-center gap-3 animate-fade-in">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    <span className="text-green-300">Tasks added successfully! View them in the Workbench.</span>
+                {/* Folder Structure Reference */}
+                <div className="p-3 mt-4 rounded-lg bg-primary-900/50">
+                  <div className="flex gap-2 items-center mb-2 text-primary-300">
+                    <Folder className="w-4 h-4" />
+                    <span className="text-sm font-medium">Target File Structure</span>
                   </div>
-                )}
-
-                {/* TaskMaster Setup (Collapsible) */}
-                <div className="border border-primary-700 rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setShowTaskmasterSetup(!showTaskmasterSetup)}
-                    className="w-full flex items-center justify-between p-4 bg-primary-800/50 hover:bg-primary-800/70 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Terminal className="w-5 h-5 text-cyan-400" />
-                      <span className="font-medium text-primary-100">TaskMaster AI Setup Instructions</span>
-                    </div>
-                    {showTaskmasterSetup ? (
-                      <ChevronUp className="w-5 h-5 text-primary-400" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-primary-400" />
-                    )}
-                  </button>
-
-                  {showTaskmasterSetup && (
-                    <div className="p-6 space-y-6 animate-fade-in">
-                      {/* Critical Warning */}
-                      <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <h4 className="font-medium text-red-300 mb-1">Don't Start from Scratch!</h4>
-                            <p className="text-sm text-red-200/80">
-                              Do NOT let AI bootstrap your codebase from an empty project. Use a CLI, template, or starter kit first.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 1 */}
-                      <div>
-                        <h4 className="text-sm font-semibold text-primary-100 mb-3 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-xs">1</span>
-                          Install TaskMaster MCP
-                        </h4>
-                        <div className="relative">
-                          <pre className="bg-primary-900 border border-primary-700 rounded-lg p-3 overflow-x-auto">
-                            <code className="text-sm text-primary-200">npx @anthropic-ai/claude-code mcp add task-master-ai</code>
-                          </pre>
-                          <button
-                            onClick={() => copyToClipboard('npx @anthropic-ai/claude-code mcp add task-master-ai', 'install')}
-                            className="absolute top-2 right-2 p-1.5 hover:bg-primary-700 rounded"
-                          >
-                            {copied === 'install' ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-primary-400" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Step 2 */}
-                      <div>
-                        <h4 className="text-sm font-semibold text-primary-100 mb-3 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-xs">2</span>
-                          Save PRD to scripts/prd.txt
-                        </h4>
-                        <div className="bg-primary-900 border border-primary-700 rounded-lg p-3">
-                          <div className="flex items-center gap-2 text-primary-300 mb-2">
-                            <Folder className="w-4 h-4" />
-                            <span className="text-sm font-medium">Project Structure</span>
-                          </div>
-                          <pre className="text-sm text-primary-400 pl-4">
+                  <pre className="pl-4 font-mono text-xs text-primary-400">
 {`your-project/
+├── CLAUDE.md                 <- Claude Code context
+├── 0_vision.md               <- Vision document
+├── 1_user_profile.md         <- User profile
+├── .mcp.json                  <- MCP server config
+├── .taskmaster/
+│   └── config.json           <- TaskMaster config
 ├── scripts/
-│   └── prd.txt          <- Your PRD goes here
-├── tasks/
-│   └── tasks.json       <- Generated by TaskMaster
-└── ...`}
-                          </pre>
-                        </div>
-                      </div>
+│   └── prd.txt               <- Your AI-generated PRD
+└── tasks/
+    └── tasks.json            <- Generated by TaskMaster`}
+                  </pre>
+                </div>
+              </div>
+            </div>
 
-                      {/* Step 3 */}
-                      <div>
-                        <h4 className="text-sm font-semibold text-primary-100 mb-3 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-xs">3</span>
-                          Initialize Tasks in Claude Code
-                        </h4>
-                        <div className="relative">
-                          <pre className="bg-primary-900 border border-primary-700 rounded-lg p-3">
-                            <code className="text-sm text-primary-200">"Initialize taskmaster and parse my PRD to create tasks"</code>
-                          </pre>
-                          <button
-                            onClick={() => copyToClipboard('Initialize taskmaster and parse my PRD to create tasks', 'init')}
-                            className="absolute top-2 right-2 p-1.5 hover:bg-primary-700 rounded"
-                          >
-                            {copied === 'init' ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-primary-400" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* JSON Parsing Workaround Warning */}
-                      <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <h5 className="text-sm font-semibold text-amber-300 mb-2">Known Issue: JSON Parsing Error</h5>
-                            <p className="text-xs text-amber-200/80 mb-3">
-                              Claude Code may encounter a JSON parsing error when trying to parse the PRD file directly:
-                            </p>
-                            <pre className="bg-amber-950/50 border border-amber-800/50 rounded p-2 mb-3 overflow-x-auto">
-                              <code className="text-xs text-amber-200/70">taskmaster-ai:parse_prd (MCP) Error: Unterminated string in JSON at position 14000</code>
-                            </pre>
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-amber-300">Workaround:</p>
-                              <ol className="text-xs text-amber-200/80 space-y-1 list-decimal list-inside">
-                                <li>Use Cursor (or another AI coding tool) to generate initial tasks from your PRD</li>
-                                <li>Then switch back to Claude Code and continue with task implementation</li>
-                              </ol>
-                              <p className="text-xs text-amber-200/60 italic mt-2">
-                                This is a temporary limitation that may be resolved in future updates.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tips */}
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-lg p-3">
-                          <div className="flex items-start gap-2">
-                            <Search className="w-4 h-4 text-cyan-400 mt-0.5" />
-                            <div>
-                              <h5 className="text-xs font-medium text-cyan-300">Analyze Complexity</h5>
-                              <p className="text-xs text-cyan-200/70 mt-1">
-                                Ask Claude to analyze task complexity and break down high-complexity tasks.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-3">
-                          <div className="flex items-start gap-2">
-                            <GitBranch className="w-4 h-4 text-green-400 mt-0.5" />
-                            <div>
-                              <h5 className="text-xs font-medium text-green-300">Commit Often!</h5>
-                              <p className="text-xs text-green-200/70 mt-1">
-                                Claude Code doesn't auto-checkpoint. Commit after each task.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <a
-                        href="https://github.com/eyaltoledano/claude-task-master"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-sm text-primary-400 hover:text-primary-300"
+            {/* Preview Modal */}
+            {previewContent && (
+              <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black/70">
+                <div className="bg-primary-900 border border-primary-700 rounded-xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+                  <div className="flex justify-between items-center p-4 border-b border-primary-700">
+                    <h3 className="font-semibold text-primary-100">{previewContent.title}</h3>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => copyToClipboard(previewContent.content, 'preview')}
+                        variant="secondary"
+                        size="sm"
                       >
-                        <BookOpen className="w-4 h-4" />
-                        View TaskMaster documentation
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                        {copied === 'preview' ? <Check className="mr-1 w-4 h-4" /> : <Copy className="mr-1 w-4 h-4" />}
+                        {copied === 'preview' ? 'Copied!' : 'Copy'}
+                      </Button>
+                      <Button
+                        onClick={() => setPreviewContent(null)}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                  <div className="overflow-auto flex-1 p-4">
+                    <pre className="font-mono text-sm whitespace-pre-wrap text-primary-200">
+                      {previewContent.content}
+                    </pre>
+                  </div>
                 </div>
               </div>
             )}
@@ -1102,13 +1231,13 @@ ${outOfScope || '- _No items marked as out of scope_'}
       </Card>
 
       {/* Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <Button
           onClick={goPrev}
           disabled={!canGoPrev}
           variant="ghost"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="mr-2 w-4 h-4" />
           Previous
         </Button>
 
@@ -1116,12 +1245,12 @@ ${outOfScope || '- _No items marked as out of scope_'}
           {canGoNext ? (
             <Button onClick={goNext}>
               Next
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           ) : (
             <Button onClick={handleContinue} disabled={!hasValidFeatures}>
               Continue to Workbench
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           )}
         </div>

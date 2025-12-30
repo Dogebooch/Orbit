@@ -13,6 +13,10 @@ interface ServerMessage {
   tasks?: TaskMasterTask[];
   connected?: boolean;
   message?: string;
+  response?: string;
+  error?: string;
+  requestId?: string;
+  status?: 'initializing' | 'ready' | 'error';
 }
 
 interface TaskMasterTask {
@@ -101,6 +105,11 @@ interface TerminalContextType {
 
   // TaskMaster sync
   taskMasterTasks: TaskMasterTask[];
+
+  // Gemini CLI state
+  geminiStatus: 'initializing' | 'ready' | 'error';
+  onGeminiMessage: ((message: { type: string; response?: string; error?: string; requestId?: string }) => void) | null;
+  setOnGeminiMessage: (callback: (message: { type: string; response?: string; error?: string; requestId?: string }) => void) => void;
 }
 
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined);
@@ -140,6 +149,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   // TaskMaster state
   const [taskMasterTasks, setTaskMasterTasks] = useState<TaskMasterTask[]>([]);
 
+  // Gemini CLI state
+  const [geminiStatus, setGeminiStatus] = useState<'initializing' | 'ready' | 'error'>('initializing');
+  const [onGeminiMessage, setOnGeminiMessageState] = useState<((message: { type: string; response?: string; error?: string; requestId?: string }) => void) | null>(null);
+
   // Handle WebSocket messages
   const handleServerMessage = useCallback((message: ServerMessage) => {
     switch (message.type) {
@@ -178,6 +191,24 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
           setTaskMasterTasks(message.tasks);
         }
         break;
+
+      case 'gemini:response':
+      case 'gemini:error':
+        if (onGeminiMessage) {
+          onGeminiMessage({
+            type: message.type,
+            response: message.response,
+            error: message.error,
+            requestId: message.requestId,
+          });
+        }
+        break;
+
+      case 'gemini:status':
+        if (message.status) {
+          setGeminiStatus(message.status);
+        }
+        break;
         
       case 'error':
         console.error('[Server Error]', message.message);
@@ -186,7 +217,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       default:
         console.log('[WebSocket] Unknown message type:', message.type);
     }
-  }, [onTerminalOutput]);
+  }, [onTerminalOutput, onGeminiMessage]);
 
   // Connect to backend
   const connectBackend = useCallback(() => {
@@ -260,6 +291,11 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   // Set terminal output callback
   const setOnTerminalOutput = useCallback((callback: (data: string) => void) => {
     setOnTerminalOutputState(() => callback);
+  }, []);
+
+  // Set Gemini message callback
+  const setOnGeminiMessage = useCallback((callback: (message: { type: string; response?: string; error?: string; requestId?: string }) => void) => {
+    setOnGeminiMessageState(() => callback);
   }, []);
 
   const loadPreferences = async () => {
@@ -671,6 +707,9 @@ nothing to commit, working tree clean
     onTerminalOutput,
     setOnTerminalOutput,
     taskMasterTasks,
+    geminiStatus,
+    onGeminiMessage,
+    setOnGeminiMessage,
   };
 
   return <TerminalContext.Provider value={value}>{children}</TerminalContext.Provider>;

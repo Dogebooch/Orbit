@@ -7,7 +7,8 @@ import path from 'path';
 import { TerminalManager } from './terminal.js';
 import { FileWatcher } from './watcher.js';
 import { TaskMasterSync } from './taskmaster.js';
-import type { ClientMessage, ServerMessage, ServerConfig } from './types.js';
+import { GeminiCLIManager } from './gemini.js';
+import type { ClientMessage, ServerMessage, ServerConfig, ProjectContext } from './types.js';
 
 const PORT = process.env.PORT || 3001;
 const HOST = '127.0.0.1'; // Localhost only for security
@@ -70,6 +71,7 @@ function broadcast(message: ServerMessage): void {
 let terminal: TerminalManager | null = null;
 let fileWatcher: FileWatcher | null = null;
 let taskMasterSync: TaskMasterSync | null = null;
+let geminiCLI: GeminiCLIManager | null = null;
 
 function initializeServices(ws: WebSocket): void {
   // Create terminal manager for this connection
@@ -95,6 +97,16 @@ function initializeServices(ws: WebSocket): void {
   taskMasterSync = new TaskMasterSync(broadcast);
   taskMasterSync.setProjectPath(config.workingDirectory);
 
+  // Create Gemini CLI manager
+  geminiCLI = new GeminiCLIManager(
+    (msg) => {
+      broadcast(msg as ServerMessage);
+    },
+    {
+      workingDirectory: config.workingDirectory,
+    }
+  );
+
   // Start terminal
   terminal.start();
 
@@ -104,6 +116,11 @@ function initializeServices(ws: WebSocket): void {
     // Initial TaskMaster sync
     taskMasterSync.checkAndSync();
   }
+
+  // Initialize Gemini CLI (async, don't wait)
+  geminiCLI.initialize().catch((error) => {
+    console.error('[Gemini CLI] Failed to initialize:', error);
+  });
 }
 
 function cleanupServices(): void {
@@ -114,6 +131,10 @@ function cleanupServices(): void {
   if (fileWatcher) {
     fileWatcher.stop();
     fileWatcher = null;
+  }
+  if (geminiCLI) {
+    geminiCLI.stop();
+    geminiCLI = null;
   }
   taskMasterSync = null;
 }
@@ -272,6 +293,48 @@ function handleClientMessage(message: ClientMessage, ws: WebSocket): void {
           success: false,
           path: message.relativePath,
           error: errorMessage,
+        } satisfies ServerMessage));
+      }
+      break;
+
+    case 'gemini:initialize':
+      if (geminiCLI && message.projectContext) {
+        // Update project context and reinitialize
+        geminiCLI.stop();
+        geminiCLI = new GeminiCLIManager(
+          (msg) => {
+            broadcast(msg as ServerMessage);
+          },
+          {
+            workingDirectory: config.workingDirectory,
+            projectContext: message.projectContext,
+          }
+        );
+        geminiCLI.initialize().catch((error) => {
+          console.error('[Gemini CLI] Failed to reinitialize:', error);
+          ws.send(JSON.stringify({
+            type: 'gemini:error',
+            error: error instanceof Error ? error.message : 'Failed to initialize',
+          } satisfies ServerMessage));
+        });
+      }
+      break;
+
+    case 'gemini:send':
+      if (geminiCLI) {
+        geminiCLI.sendPrompt(message.prompt, message.requestId).catch((error) => {
+          console.error('[Gemini CLI] Failed to send prompt:', error);
+          ws.send(JSON.stringify({
+            type: 'gemini:error',
+            error: error instanceof Error ? error.message : 'Failed to send prompt',
+            requestId: message.requestId,
+          } satisfies ServerMessage));
+        });
+      } else {
+        ws.send(JSON.stringify({
+          type: 'gemini:error',
+          error: 'Gemini CLI not initialized',
+          requestId: message.requestId,
         } satisfies ServerMessage));
       }
       break;

@@ -7,3 +7,4 @@ export type { TipVariant } from './TipCard';
 export { StageTips, useFirstVisit } from './StageTips';
 export { CommandPalette, CommandIcons } from './CommandPalette';
 export { GitReminder } from './GitReminder';
+export { AIHelperButton } from './AIHelperButton';

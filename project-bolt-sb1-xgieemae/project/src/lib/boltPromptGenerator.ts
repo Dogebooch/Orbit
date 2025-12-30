@@ -201,7 +201,7 @@ function generateFeaturesSection(features: Feature[]): string {
 function getTechStackLabel(category: string, value: string): string {
   const labels: Record<string, Record<string, string>> = {
     frontend: {
-      'react-vite': 'React + Vite + TypeScript',
+      'react-vite': 'React + TypeScript + Vite',
       'nextjs': 'Next.js + TypeScript',
       'vue': 'Vue 3 + TypeScript',
       'vanilla': 'Vanilla JavaScript',
@@ -217,12 +217,15 @@ function getTechStackLabel(category: string, value: string): string {
       'none': 'None',
       'supabase-postgres': 'Supabase PostgreSQL',
       'sqlite': 'SQLite',
+      'sqlite-better': 'SQLite with better-sqlite3 (Node.js/Electron)',
+      'sqlite-sqljs': 'SQLite with sql.js (Browser/WebAssembly)',
       'firebase': 'Firebase Firestore',
     },
     deployment: {
       'vercel': 'Vercel',
       'netlify': 'Netlify',
       'railway': 'Railway',
+      'electron': 'Electron Desktop App',
       'local': 'Local Development Only',
     },
   };
