@@ -72,7 +72,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
         .from('settings')
         .select('value')
         .eq('user_id', user?.id)
-        .eq('key', 'setup_prerequisites')
+        .eq('key', `setup_prerequisites_${currentProject.id}`)
         .maybeSingle();
 
       if (setupData?.value) {

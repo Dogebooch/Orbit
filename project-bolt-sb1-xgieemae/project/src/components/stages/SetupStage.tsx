@@ -72,7 +72,7 @@ export function SetupStage() {
   }, [currentProject, user]);
 
   const loadSavedState = async () => {
-    if (!user) return;
+    if (!user || !currentProject) return;
 
     setLoading(true);
     try {
@@ -80,7 +80,7 @@ export function SetupStage() {
         .from('settings')
         .select('value')
         .eq('user_id', user.id)
-        .eq('key', 'setup_prerequisites')
+        .eq('key', `setup_prerequisites_${currentProject.id}`)
         .maybeSingle();
 
       if (data?.value) {
@@ -95,14 +95,14 @@ export function SetupStage() {
   };
 
   const saveState = async (newChecked: Record<string, boolean>) => {
-    if (!user) return;
+    if (!user || !currentProject) return;
 
     try {
       const { data: existing } = await supabase
         .from('settings')
         .select('id')
         .eq('user_id', user.id)
-        .eq('key', 'setup_prerequisites')
+        .eq('key', `setup_prerequisites_${currentProject.id}`)
         .maybeSingle();
 
       const value = { checkedItems: newChecked };
@@ -115,7 +115,7 @@ export function SetupStage() {
       } else {
         await supabase.from('settings').insert({
           user_id: user.id,
-          key: 'setup_prerequisites',
+          key: `setup_prerequisites_${currentProject.id}`,
           value,
         });
       }

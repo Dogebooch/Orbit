@@ -84,7 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('settings')
         .select('value')
         .eq('user_id', user?.id)
-        .eq('key', 'setup_prerequisites')
+        .eq('key', `setup_prerequisites_${currentProject.id}`)
         .maybeSingle();
 
       if (setupData?.value) {

@@ -3,9 +3,7 @@ import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
 import { useTerminal } from '../../contexts/TerminalContext';
 import { Button } from '../ui';
-import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, ListChecks, Code2, Rocket, ArrowLeft, Package } from 'lucide-react';
-import { TemplateSelector } from './TemplateSelector';
-import { ProjectTemplate, getTemplateById } from '../../lib/projectTemplates';
+import { FolderOpen, Plus, ChevronDown, CheckCircle2, Circle, Lightbulb, ListChecks, Code2, Rocket, Package, X } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -29,16 +27,12 @@ interface ProjectSelectorProps {
   onNewProjectModalClose?: () => void;
 }
 
-type NewProjectStep = 'template' | 'details';
-
 export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }: ProjectSelectorProps) {
   const { user, currentProject, setCurrentProject, currentStage, setCurrentStage, projectSelectorDropdownTrigger } = useApp();
   const { isBackendConnected, wsClient } = useTerminal();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectStep, setNewProjectStep] = useState<NewProjectStep>('template');
-  const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,8 +47,8 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
   // Sync with external trigger for new project modal
   useEffect(() => {
     if (showNewProjectModal) {
-      setShowNewProject(true);
-      setNewProjectStep('template');
+      setShowDropdown(true);
+      setShowNewProjectForm(true);
     }
   }, [showNewProjectModal]);
 
@@ -98,7 +92,7 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
       .from('settings')
       .select('value')
       .eq('user_id', user?.id)
-      .eq('key', 'setup_prerequisites')
+      .eq('key', `setup_prerequisites_${currentProject.id}`)
       .maybeSingle();
 
     if (setupData?.value) {
@@ -198,32 +192,6 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
       if (error) throw error;
 
       if (data) {
-        // Apply template data if a template was selected (and it's not blank)
-        if (selectedTemplate && selectedTemplate.id !== 'blank') {
-          // Insert vision data
-          await supabase.from('visions').insert({
-            project_id: data.id,
-            problem: selectedTemplate.vision.problem,
-            target_user: selectedTemplate.vision.target_user,
-            success_metrics: selectedTemplate.vision.success_metrics,
-            why_software: selectedTemplate.vision.why_software,
-            target_level: selectedTemplate.vision.target_level,
-          });
-
-          // Insert user profile data
-          await supabase.from('user_profiles').insert({
-            project_id: data.id,
-            primary_user: selectedTemplate.userProfile.primary_user,
-            goal: selectedTemplate.userProfile.goal,
-            context: selectedTemplate.userProfile.context,
-            frustrations: selectedTemplate.userProfile.frustrations,
-            technical_comfort: selectedTemplate.userProfile.technical_comfort,
-            time_constraints: selectedTemplate.userProfile.time_constraints,
-            persona_name: selectedTemplate.userProfile.persona_name,
-            persona_role: selectedTemplate.userProfile.persona_role,
-          });
-        }
-
         setProjects([data, ...projects]);
         setCurrentProject(data);
         resetNewProjectForm();
@@ -235,90 +203,17 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
     }
   };
 
-  const handleTemplateSelected = (template: ProjectTemplate) => {
-    setSelectedTemplate(template);
-    setNewProjectStep('details');
-  };
-
   const resetNewProjectForm = () => {
-    setShowNewProject(false);
-    setNewProjectStep('template');
-    setSelectedTemplate(null);
+    setShowNewProjectForm(false);
     setNewProjectName('');
     setNewProjectDescription('');
+    setShowDropdown(false);
     onNewProjectModalClose?.();
   };
 
   const handleCancelNewProject = () => {
     resetNewProjectForm();
   };
-
-  const handleBackToTemplates = () => {
-    setNewProjectStep('template');
-    setSelectedTemplate(null);
-  };
-
-  if (showNewProject) {
-    return (
-      <div className="p-4 border-b border-accent-800 bg-primary-900">
-        {newProjectStep === 'template' ? (
-          <TemplateSelector
-            onSelectTemplate={handleTemplateSelected}
-            onBack={handleCancelNewProject}
-          />
-        ) : (
-          <form onSubmit={createProject} className="space-y-3">
-            {selectedTemplate && selectedTemplate.id !== 'blank' && (
-              <div className="flex items-center gap-2 p-2 bg-primary-800 rounded-lg mb-2">
-                <span className="text-lg">{selectedTemplate.icon}</span>
-                <div className="flex-1">
-                  <span className="text-xs text-primary-400">Template:</span>
-                  <span className="text-sm font-medium text-primary-200 ml-1">{selectedTemplate.name}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleBackToTemplates}
-                  className="text-xs text-primary-400 hover:text-primary-200"
-                >
-                  Change
-                </button>
-              </div>
-            )}
-            
-            <input
-              type="text"
-              placeholder="Project name"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              className="input text-sm"
-              autoFocus
-            />
-            <textarea
-              placeholder="Description (optional)"
-              value={newProjectDescription}
-              onChange={(e) => setNewProjectDescription(e.target.value)}
-              className="textarea text-sm"
-              rows={2}
-            />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleBackToTemplates}
-                className="text-sm"
-              >
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                Back
-              </Button>
-              <Button type="submit" loading={loading} className="text-sm flex-1">
-                Create Project
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
-    );
-  }
 
   const completedStages = Object.values(stageProgress).filter(Boolean).length;
   const totalStages = 6;
@@ -417,42 +312,87 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
 
       {showDropdown && (
         <div className="absolute top-full left-0 right-0 mt-1 mx-4 bg-primary-800 border border-accent-700 rounded-lg shadow-soft-lg z-50 max-h-64 overflow-y-auto">
-          <div className="p-2">
-            <button
-              onClick={() => {
-                setShowNewProject(true);
-                setShowDropdown(false);
-                setHighlightNewProject(false);
-              }}
-              className={`w-full flex items-center gap-2 p-2 rounded text-sm transition-all ${
-                highlightNewProject
-                  ? 'bg-amber-600/30 border-2 border-amber-500 text-amber-200 font-semibold animate-pulse'
-                  : 'hover:bg-primary-700 text-primary-200'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              New Project
-            </button>
-          </div>
-          <div className="border-t border-accent-700">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => {
-                  setCurrentProject(project);
-                  setShowDropdown(false);
-                }}
-                className={`w-full p-3 text-left hover:bg-primary-700 transition-colors ${
-                  currentProject?.id === project.id ? 'bg-primary-700' : ''
-                }`}
-              >
-                <div className="text-sm font-medium text-primary-100">{project.name}</div>
-                {project.description && (
-                  <div className="text-xs text-primary-400 mt-1">{project.description}</div>
-                )}
-              </button>
-            ))}
-          </div>
+          {showNewProjectForm ? (
+            <form onSubmit={createProject} className="p-3 space-y-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-primary-200">New Project</span>
+                <button
+                  type="button"
+                  onClick={handleCancelNewProject}
+                  className="p-1 rounded hover:bg-primary-700 text-primary-400 hover:text-primary-200 transition-colors"
+                  aria-label="Cancel"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Project name"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                className="w-full px-3 py-2 bg-primary-900 border border-primary-700 rounded-lg text-sm text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-600"
+                autoFocus
+              />
+              <textarea
+                placeholder="Description (optional)"
+                value={newProjectDescription}
+                onChange={(e) => setNewProjectDescription(e.target.value)}
+                className="w-full px-3 py-2 bg-primary-900 border border-primary-700 rounded-lg text-sm text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-600 resize-none"
+                rows={2}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleCancelNewProject}
+                  className="text-sm"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" loading={loading} className="text-sm flex-1">
+                  Create Project
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div className="p-2">
+                <button
+                  onClick={() => {
+                    setShowNewProjectForm(true);
+                    setHighlightNewProject(false);
+                  }}
+                  className={`w-full flex items-center gap-2 p-2 rounded text-sm transition-all ${
+                    highlightNewProject
+                      ? 'bg-amber-600/30 border-2 border-amber-500 text-amber-200 font-semibold animate-pulse'
+                      : 'hover:bg-primary-700 text-primary-200'
+                  }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  New Project
+                </button>
+              </div>
+              <div className="border-t border-accent-700">
+                {projects.map((project) => (
+                  <button
+                    key={project.id}
+                    onClick={() => {
+                      setCurrentProject(project);
+                      setShowDropdown(false);
+                    }}
+                    className={`w-full p-3 text-left hover:bg-primary-700 transition-colors ${
+                      currentProject?.id === project.id ? 'bg-primary-700' : ''
+                    }`}
+                  >
+                    <div className="text-sm font-medium text-primary-100">{project.name}</div>
+                    {project.description && (
+                      <div className="text-xs text-primary-400 mt-1">{project.description}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
