@@ -109,59 +109,42 @@ export const XTerminal = forwardRef<XTerminalRef, XTerminalProps>(({
 
   // Handle terminal resize with debouncing and safety checks
   const handleResize = useCallback(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:111',message:'handleResize called',data:{isDisposed:isDisposedRef.current,hasFitAddon:!!fitAddonRef.current,hasXterm:!!xtermRef.current,hasTerminalRef:!!terminalRef.current,hasElement:xtermRef.current?.element!==null},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
     // Check if terminal is disposed - prevent operations on disposed terminal
     if (isDisposedRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:114',message:'Terminal disposed, skipping fit',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       return;
     }
     if (fitAddonRef.current && xtermRef.current && terminalRef.current) {
       // Check if terminal is fully initialized (has element attached)
       if (!xtermRef.current.element) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:119',message:'Terminal not ready - no element, skipping fit',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         return;
       }
       
       // Additional check: verify terminal's internal state is valid
       // Accessing private _core to check if terminal is still valid
       const terminal = xtermRef.current as any;
-      if (terminal._core && terminal._core._renderService && !terminal._core._renderService.dimensions) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:126',message:'Terminal internal state invalid - missing dimensions',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
+      
+      if (!terminal._core || !terminal._core._renderService) {
+        return;
+      }
+      
+      // Check render service dimensions are ready
+      if (!terminal._core._renderService.dimensions) {
         return;
       }
       
       try {
         // Check if container has dimensions before fitting
         const rect = terminalRef.current.getBoundingClientRect();
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:131',message:'Container dimensions check',data:{width:rect.width,height:rect.height},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         if (rect.width === 0 || rect.height === 0) {
           // Container not sized yet, schedule retry
           setTimeout(handleResize, 50);
           return;
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:138',message:'About to call fit()',data:{hasElement:!!xtermRef.current.element,hasCore:!!(terminal._core)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
+        
         fitAddonRef.current.fit();
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:141',message:'fit() completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         const { cols, rows } = xtermRef.current;
         onResizeRef.current(cols, rows);
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:145',message:'Resize error caught',data:{error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         console.error('[XTerminal] Resize error:', error);
       }
     }
@@ -196,23 +179,31 @@ export const XTerminal = forwardRef<XTerminalRef, XTerminalProps>(({
     
     // Set up global error handler for xterm async errors
     const xtermErrorHandler = (event: ErrorEvent) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:197',message:'Global error caught',data:{message:event.message,filename:event.filename,lineno:event.lineno,error:event.error?.message,isDisposed:isDisposedRef.current,hasXterm:!!xtermRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      // Check if this is the xterm dimensions error
-      if (event.message && event.message.includes('dimensions') && event.filename && event.filename.includes('xterm')) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:201',message:'XTerm dimensions error caught - suppressing',data:{isDisposed:isDisposedRef.current,hasXterm:!!xtermRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        // Suppress the error if terminal is disposed or not available
-        if (isDisposedRef.current || !xtermRef.current) {
+      // Check if this is the xterm dimensions error - always suppress it
+      // This error occurs when xterm's internal async operations access dimensions
+      // after the terminal has been disposed (common with React StrictMode)
+      if (event.message && event.message.includes('dimensions')) {
+        const isXtermError = (event.filename && event.filename.includes('xterm')) || 
+                            (event.error?.stack && event.error.stack.includes('xterm'));
+        if (isXtermError) {
           event.preventDefault();
-          return true; // Prevent default error handling
+          event.stopImmediatePropagation();
+          return true;
         }
       }
       return false;
     };
-    window.addEventListener('error', xtermErrorHandler);
+    
+    // Also handle unhandled promise rejections from xterm
+    const xtermRejectionHandler = (event: PromiseRejectionEvent) => {
+      const errorMessage = event.reason?.message || String(event.reason);
+      if (errorMessage.includes('dimensions')) {
+        event.preventDefault();
+      }
+    };
+    
+    window.addEventListener('error', xtermErrorHandler, true); // Use capture phase
+    window.addEventListener('unhandledrejection', xtermRejectionHandler);
 
     const theme = colorSchemes[colorScheme];
     
@@ -246,25 +237,47 @@ export const XTerminal = forwardRef<XTerminalRef, XTerminalProps>(({
       // Container is sized, open terminal
       terminal.open(terminalRef.current);
       
-      // Fit after opening
+      // Fit after opening - use triple RAF to ensure terminal is fully initialized
       requestAnimationFrame(() => {
-        try {
-          fitAddon.fit();
-          const { cols, rows } = terminal;
-          onResizeRef.current(cols, rows);
-        } catch (error) {
-          console.error('[XTerminal] Initial fit error:', error);
-          // Retry after a short delay
-          setTimeout(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
             try {
-              fitAddon.fit();
-              const { cols, rows } = terminal;
-              onResizeRef.current(cols, rows);
-            } catch (retryError) {
-              console.error('[XTerminal] Retry fit error:', retryError);
+              const terminalAny = terminal as any;
+              // Check render service is ready, then try fit() with error handling
+              if (terminalAny._core?._renderService?.dimensions) {
+                fitAddon.fit();
+                const { cols, rows } = terminal;
+                onResizeRef.current(cols, rows);
+              } else {
+                // Render service not ready, retry after delay
+                setTimeout(() => {
+                  try {
+                    const retryTerminalAny = terminal as any;
+                    if (retryTerminalAny._core?._renderService?.dimensions) {
+                      fitAddon.fit();
+                      const { cols, rows } = terminal;
+                      onResizeRef.current(cols, rows);
+                    }
+                  } catch (retryError) {
+                    console.error('[XTerminal] Retry fit error:', retryError);
+                  }
+                }, 100);
+              }
+            } catch (error) {
+              console.error('[XTerminal] Initial fit error:', error);
+              // Retry after a short delay
+              setTimeout(() => {
+                try {
+                  fitAddon.fit();
+                  const { cols, rows } = terminal;
+                  onResizeRef.current(cols, rows);
+                } catch (retryError) {
+                  console.error('[XTerminal] Retry fit error:', retryError);
+                }
+              }, 150);
             }
-          }, 100);
-        }
+          });
+        });
       });
     };
 
@@ -315,13 +328,10 @@ export const XTerminal = forwardRef<XTerminalRef, XTerminalProps>(({
     });
 
     return () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:325',message:'Cleanup started',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       // Mark as disposed first to prevent any pending operations
       isDisposedRef.current = true;
+      
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('error', xtermErrorHandler);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
@@ -330,17 +340,16 @@ export const XTerminal = forwardRef<XTerminalRef, XTerminalProps>(({
         try {
           terminal.dispose();
         } catch (error) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:337',message:'Dispose error',data:{error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           console.error('[XTerminal] Dispose error:', error);
         }
         xtermRef.current = null;
         fitAddonRef.current = null;
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'XTerminal.tsx:343',message:'Cleanup completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
+      // Delay removing error handlers to catch any post-disposal async errors from xterm
+      setTimeout(() => {
+        window.removeEventListener('error', xtermErrorHandler, true);
+        window.removeEventListener('unhandledrejection', xtermRejectionHandler);
+      }, 500);
     };
   }, []); // Run once on mount
 

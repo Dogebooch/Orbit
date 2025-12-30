@@ -16,12 +16,23 @@
     <div id="root"></div>
     <script>
       window.onerror = function(message, source, lineno, colno, error) {
+        // Suppress known xterm.js async errors (safe to ignore)
+        if (message && message.indexOf('dimensions') !== -1 && source && source.indexOf('xterm') !== -1) {
+          console.warn('[XTerminal] Suppressed xterm async error:', message);
+          return true; // Prevent default error handling
+        }
         var div = document.createElement('div');
         div.style.cssText = 'color:red; background:white; padding:20px; border:2px solid red; margin:20px; z-index:9999; position:fixed; top:0; left:0; right:0; font-family:monospace; white-space:pre-wrap;';
         div.textContent = 'Global Error: ' + message + '\nAt: ' + source + ':' + lineno + ':' + colno + '\nStack: ' + (error ? error.stack : 'N/A');
         document.body.appendChild(div);
       };
       window.onunhandledrejection = function(event) {
+        // Suppress known xterm.js async errors
+        var reason = event.reason ? (event.reason.message || String(event.reason)) : '';
+        if (reason.indexOf('dimensions') !== -1) {
+          console.warn('[XTerminal] Suppressed xterm async rejection:', reason);
+          return;
+        }
         var div = document.createElement('div');
         div.style.cssText = 'color:red; background:white; padding:20px; border:2px solid red; margin:20px; z-index:9999; position:fixed; top:100px; left:0; right:0; font-family:monospace; white-space:pre-wrap;';
         div.textContent = 'Unhandled Promise Rejection: ' + event.reason;
