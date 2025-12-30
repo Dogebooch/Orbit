@@ -9,3 +9,5 @@ export { TipsPanel } from './TipsPanel';
 export { CommandPalette, CommandIcons } from './CommandPalette';
 export { Toast } from './Toast';
 export { AIHelperButton } from './AIHelperButton';
+export { Modal } from './Modal';
+export { Tooltip } from './Tooltip';

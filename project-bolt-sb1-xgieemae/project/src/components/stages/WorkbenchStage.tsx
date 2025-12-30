@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Code2, BookMarked, ExternalLink, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { TerminalPanel } from '../workbench/TerminalPanel';
-import { Card, Button } from '../ui';
+import { Card, Button, Tooltip } from '../ui';
 import { useApp } from '../../contexts/AppContext';
+import { useTerminal } from '../../contexts/TerminalContext';
+import { supabase } from '../../lib/supabase';
 import { fetchProjectData, generateClaudeMd } from '../../lib/claudeExport';
+import { 
+  groupPromptsByType, 
+  getTaskTypeLabel, 
+  generateTooltipText,
+  getTaskTypeColors,
+  type Prompt as TaskMasterPrompt 
+} from '../../utils/taskMasterUtils';
 
 export function WorkbenchStage() {
-  const { setCurrentStage, currentProject } = useApp();
+  const { setCurrentStage, currentProject, user } = useApp();
+  const { setCommandInput } = useTerminal();
   const [copied, setCopied] = useState(false);
-  const [isTaskMasterExpanded, setIsTaskMasterExpanded] = useState(false);
+  const [isTaskMasterExpanded, setIsTaskMasterExpanded] = useState(true);
+  const [taskMasterPrompts, setTaskMasterPrompts] = useState<TaskMasterPrompt[]>([]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState(false);
 
   const handleCopyContext = async () => {
     if (!currentProject) return;
@@ -25,6 +37,42 @@ export function WorkbenchStage() {
       console.error('Failed to copy context:', error);
     }
   };
+
+  const loadTaskMasterPrompts = useCallback(async () => {
+    if (!user) return;
+
+    setIsLoadingPrompts(true);
+    try {
+      const { data, error } = await supabase
+        .from('prompts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('category', 'taskmaster')
+        .order('title', { ascending: true });
+
+      if (error) {
+        console.error('Error loading TaskMaster prompts:', error);
+      } else if (data) {
+        setTaskMasterPrompts(data);
+      }
+    } catch (error) {
+      console.error('Failed to load TaskMaster prompts:', error);
+    } finally {
+      setIsLoadingPrompts(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (currentProject && user) {
+      loadTaskMasterPrompts();
+    }
+  }, [currentProject, user, loadTaskMasterPrompts]);
+
+  const handlePromptClick = (prompt: TaskMasterPrompt) => {
+    setCommandInput(prompt.content);
+  };
+
+  const groupedPrompts = groupPromptsByType(taskMasterPrompts);
 
   return (
     <div className="h-full flex flex-col">
@@ -46,30 +94,38 @@ export function WorkbenchStage() {
       {/* Context Clipper and TaskMaster Commands side by side */}
       <div className="mb-3 flex gap-3 items-start">
         {/* Context Clipper - positioned at left */}
-        <div className="flex-shrink-0">
-          <Button
-            onClick={handleCopyContext}
-            variant="primary"
-            size="sm"
-            disabled={!currentProject}
-            className="text-xs"
-          >
-            {copied ? (
-              <>
-                <Check className="mr-1.5 w-3.5 h-3.5" />
-                Context Clipper: Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="mr-1.5 w-3.5 h-3.5" />
-                Context Clipper: Copy Project Context for the AI
-              </>
-            )}
-          </Button>
-        </div>
+        <Card className="flex-shrink-0 p-4" style={{ width: 'fit-content' }}>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-primary-100">Context Clipper</h2>
+            <p className="text-xs text-primary-400">
+              Copy project context for AI assistants
+            </p>
+          </div>
+          <div className="mt-3">
+            <Button
+              onClick={handleCopyContext}
+              variant="primary"
+              size="sm"
+              disabled={!currentProject}
+              className="text-xs w-full"
+            >
+              {copied ? (
+                <>
+                  <Check className="mr-1.5 w-3.5 h-3.5" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-1.5 w-3.5 h-3.5" />
+                  Copy Project Context
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
 
         {/* TaskMaster Prompts Quick Access - takes remaining space */}
-        <Card className="flex-1 min-w-0">
+        <Card className="flex-1 min-w-0 p-4">
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
@@ -83,7 +139,7 @@ export function WorkbenchStage() {
               )}
             </button>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-primary-100 truncate">TaskMaster Commands</h2>
+              <h2 className="text-sm font-semibold text-primary-100 truncate">TaskMaster Commands</h2>
               <p className="text-xs text-primary-400 truncate">
                 Quick access to TaskMaster prompts
               </p>
@@ -103,59 +159,40 @@ export function WorkbenchStage() {
           </Button>
         </div>
         {isTaskMasterExpanded && (
-          <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
-              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Get Started</h3>
-              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
-                Parse PRD and create initial tasks
-              </p>
-              <Button
-                onClick={() => {
-                  setCurrentStage('promptlibrary');
-                  sessionStorage.setItem('promptLibraryFilter', 'taskmaster');
-                  sessionStorage.setItem('promptLibrarySearch', 'Parse PRD');
-                }}
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs whitespace-nowrap"
-              >
-                View Prompt
-              </Button>
-            </div>
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
-              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Task Management</h3>
-              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
-                Show tasks, get next task, analyze complexity
-              </p>
-              <Button
-                onClick={() => {
-                  setCurrentStage('promptlibrary');
-                  sessionStorage.setItem('promptLibraryFilter', 'taskmaster');
-                }}
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs whitespace-nowrap"
-              >
-                View Prompts
-              </Button>
-            </div>
-            <div className="p-3 rounded-lg bg-primary-800/50 border border-primary-700/50 overflow-hidden">
-              <h3 className="text-sm font-medium text-primary-200 mb-1 truncate">Implementation</h3>
-              <p className="text-xs text-primary-400 mb-2 line-clamp-2">
-                Implement tasks, break down complex tasks
-              </p>
-              <Button
-                onClick={() => {
-                  setCurrentStage('promptlibrary');
-                  sessionStorage.setItem('promptLibraryFilter', 'taskmaster');
-                }}
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs whitespace-nowrap"
-              >
-                View Prompts
-              </Button>
-            </div>
+          <div className="mt-4 space-y-6">
+            {isLoadingPrompts ? (
+              <div className="text-center py-4 text-primary-400 text-sm">Loading TaskMaster commands...</div>
+            ) : groupedPrompts.size === 0 ? (
+              <div className="text-center py-4 text-primary-400 text-sm">
+                No TaskMaster commands found. Add some in the Prompt Library!
+              </div>
+            ) : (
+              Array.from(groupedPrompts.entries()).map(([taskType, prompts]) => {
+                const colors = getTaskTypeColors(taskType);
+                return (
+                  <div key={taskType} className="space-y-3">
+                    <h3 className="text-sm font-semibold text-primary-400 px-1">
+                      {getTaskTypeLabel(taskType)}
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {prompts.map((prompt) => {
+                        const tooltipText = generateTooltipText(prompt);
+                        return (
+                          <Tooltip key={prompt.id} content={tooltipText} position="top" maxWidth={350}>
+                            <button
+                              onClick={() => handlePromptClick(prompt)}
+                              className={`px-3 py-2 rounded-lg ${colors.bg} ${colors.border} ${colors.hoverBg} ${colors.hoverBorder} transition-colors cursor-pointer text-xs whitespace-nowrap text-primary-200 hover:text-primary-100`}
+                            >
+                              {prompt.title}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
         </Card>
