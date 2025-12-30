@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useApp } from './contexts/AppContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Sidebar } from './components/layout/Sidebar';
@@ -21,6 +21,11 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
+
+  // Sync localStage when currentStage changes from context (e.g., "Continue to Strategy" buttons)
+  useEffect(() => {
+    setLocalStage(currentStage);
+  }, [currentStage]);
 
   const handleStageChange = useCallback((stage: string) => {
     setLocalStage(stage);
