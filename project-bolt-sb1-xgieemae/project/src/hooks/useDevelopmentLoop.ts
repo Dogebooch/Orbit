@@ -2,9 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { supabase } from '../lib/supabase';
-// #region agent log
-fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useDevelopmentLoop.ts:4',message:'supabase import',data:{supabaseDefined:supabase!==undefined&&supabase!==null,supabaseType:typeof supabase,hasChannel:typeof (supabase as any).channel==='function',hasFrom:typeof (supabase as any).from==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-// #endregion
 import type { LoopStep } from '../components/workbench/DevelopmentLoopHelper';
 import {
   detectCurrentStep,
@@ -48,9 +45,6 @@ export function useDevelopmentLoop() {
     loadTasks();
 
     // Subscribe to task changes
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/06ca521e-9958-4520-b054-3b4dc07ce95c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useDevelopmentLoop.ts:47',message:'BEFORE channel call POST-FIX',data:{supabaseDefined:supabase!==undefined&&supabase!==null,supabaseType:typeof supabase,hasChannel:typeof supabase.channel==='function',hasRemoveChannel:typeof (supabase as any).removeChannel==='function',supabaseKeys:supabase?Object.keys(supabase):'null',currentProjectId:currentProject?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     const channel = supabase
       .channel(`tasks_${currentProject.id}`)
       .on(

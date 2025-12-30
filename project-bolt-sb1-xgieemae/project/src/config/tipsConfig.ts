@@ -98,7 +98,7 @@ export const STAGE_TIPS: TipConfig[] = [
     stage: 'strategy',
     variant: 'info',
     title: 'Download from Bolt to Local',
-    content: 'After building your MVP in Bolt.new, use the download button to get your project files. Extract them to your local environment, then open the Workbench stage to continue development with TaskMaster and Claude Code locally.',
+    content: 'After building your MVP in Bolt.new, use the download button to get your project files. Extract them to your local environment, then open the Workbench phase to continue development with TaskMaster and Claude Code locally.',
     dismissible: true,
   },
   {
@@ -182,7 +182,7 @@ export const STAGE_TIPS: TipConfig[] = [
     stage: 'workbench',
     variant: 'pro-tip',
     title: 'Refresh Context Before Implementing',
-    content: 'AI models forget context between sessions. Before starting any task, use the Context Clipper to copy your project vision, user profile, and current task. Paste this into your AI conversation to set the stage.',
+    content: 'AI models forget context between sessions. Before starting any task, use the Context Clipper to copy your project vision, user profile, and current task. Paste this into your AI conversation to set the context.',
     dismissible: true,
   },
   {

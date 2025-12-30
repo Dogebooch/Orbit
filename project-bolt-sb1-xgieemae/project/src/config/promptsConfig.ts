@@ -63,6 +63,14 @@ export const DEFAULT_PROMPTS: PromptDefinition[] = [
     source: 'taskmaster-guide',
   },
   {
+    title: 'Generate PRD from Foundation Docs',
+    content:
+      'You are an expert technical product manager specializing in feature development and creating comprehensive PRDs.\n\nGenerate a detailed PRD based on these inputs:\n\n- Vision: [paste 0_vision.md]\n- User: [paste 1_user_profile.md]\n- Metrics: [paste 2_success_metrics.md]\n- Copilot Analysis: [paste copilot-instructions.md]\n\nInclude these sections:\n\n1. Introduction\n2. Product Overview\n3. Goals and Objectives\n4. Target Audience\n5. Features and Requirements\n6. User Stories and Acceptance Criteria\n7. Technical Requirements / Stack\n8. Design and User Interface\n\nFor user stories:\n- Assign unique IDs (ST-101, ST-102...)\n- Include primary, alternative, and edge-case scenarios\n- Make each story testable\n- Include acceptance criteria\n\nOutput as markdown.',
+    category: 'prd',
+    is_favorite: true,
+    source: 'comprehensive-guide',
+  },
+  {
     title: 'Feature Specification Pattern',
     content:
       '## Feature Specification: [FEATURE_NAME]\n\n## User Story\nAs a [user type], I want to [action] so that [benefit].\n\n## Acceptance Criteria\n- [ ] [Specific testable requirement]\n- [ ] [Specific testable requirement]\n- [ ] [Specific testable requirement]',
@@ -95,6 +103,14 @@ export const DEFAULT_PROMPTS: PromptDefinition[] = [
       "What's the next task I should work on? Please consider dependencies and priorities.",
     category: 'taskmaster',
     is_favorite: true,
+    source: 'taskmaster-guide',
+  },
+  {
+    title: 'Add Context to Task Run',
+    content:
+      "When prompting the AI to work on the next task, ensure to provide additional context on e.g. UI preferences, API docs etc. You can also attach images!\n\nThis will guide it on the path you want to go.\n\nExample:\nWhat's the next task I should work on? Please consider dependencies and priorities.\n\nAdditional context:\n- UI preferences: [DESCRIBE UI STYLE PREFERENCES]\n- API documentation: [LINK OR DESCRIBE API]\n- Design references: [ATTACH IMAGES IF NEEDED]\n- Other considerations: [ANY OTHER CONTEXT]",
+    category: 'taskmaster',
+    is_favorite: false,
     source: 'taskmaster-guide',
   },
   {
@@ -277,6 +293,22 @@ export const DEFAULT_PROMPTS: PromptDefinition[] = [
     is_favorite: true,
     source: 'built-in',
   },
+  {
+    title: 'Opening Context Pattern',
+    content:
+      'Context:\n\nProject: [Brief description from vision doc]\n\nUser: [User profile summary]\n\nCurrent goal: [What you want to accomplish this session]\n\nFiles to consider: [Specific files if relevant]\n\nTask: [Specific, actionable request]\n\nPlease ask any clarifying questions before starting.',
+    category: 'context',
+    is_favorite: true,
+    source: 'comprehensive-guide',
+  },
+  {
+    title: 'Prompt Evolution Examples',
+    content:
+      'Here are examples of how to improve prompts from vague to optimal:\n\n**Level 1 (Too vague):**\n"Build a user authentication system."\n\n**Level 2 (Better):**\n"Build a user authentication system with email/password registration, JWT sessions, and password reset."\n\n**Level 3 (Optimal):**\n"Context: Building a B2B invoice tool for small business owners who need quick, secure access. Task: Implement user authentication with email/password, JWT sessions (7-day expiry), password reset via email, client-side validation, mobile-first design. Constraints: Use existing design system, follow security best practices, keep forms simple (max 3 fields per step). Please implement registration flow first, then ask before proceeding."\n\nUse this pattern to improve your prompts: Start with what you want, add specific requirements, then add context, constraints, and clear instructions.',
+    category: 'context',
+    is_favorite: false,
+    source: 'comprehensive-guide',
+  },
 
   // ============================================================================
   // Implementation Category
@@ -296,6 +328,14 @@ export const DEFAULT_PROMPTS: PromptDefinition[] = [
     category: 'implementation',
     is_favorite: false,
     source: 'built-in',
+  },
+  {
+    title: 'Options Pattern',
+    content:
+      'I need to implement [specific feature].\n\nPlease provide 3 different approaches:\n\n1. The simplest solution that works\n2. A more robust solution with better error handling\n3. The most user-friendly solution\n\nFor each approach, explain:\n- Implementation complexity\n- User experience impact\n- Maintenance considerations\n- Pros and cons\n\nI\'ll choose one and you can implement it.',
+    category: 'implementation',
+    is_favorite: true,
+    source: 'comprehensive-guide',
   },
   {
     title: 'Context-Aware Modifications Pattern',

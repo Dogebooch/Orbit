@@ -9,9 +9,9 @@ import { FavoritesPanel } from '../terminal/FavoritesPanel';
 import { XTerminal, XTerminalRef } from '../terminal/XTerminal';
 import { GripVertical } from 'lucide-react';
 
-const DEFAULT_TERMINAL_HEIGHT = 400; // pixels
-const MIN_TERMINAL_HEIGHT = 200;
-const MAX_TERMINAL_HEIGHT = 800;
+const DEFAULT_TERMINAL_HEIGHT = 600; // pixels - increased for main focus
+const MIN_TERMINAL_HEIGHT = 300;
+const MAX_TERMINAL_HEIGHT = 1000;
 
 export function TerminalPanel() {
   const {

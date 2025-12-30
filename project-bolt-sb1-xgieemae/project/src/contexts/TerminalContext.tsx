@@ -2,6 +2,17 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '../lib/supabase';
 import { useApp } from './AppContext';
 import { WebSocketClient, getWebSocketClient, disconnectWebSocket, ConnectionStatus } from '../lib/websocket';
+import type { DocumentType } from '../lib/foundationContext';
+import type { Question } from '../components/stages/vision/QuestionCard';
+
+// Extended ServerMessage for Gemini terminal
+interface GeminiServerMessage extends ServerMessage {
+  question?: Question;
+  questionId?: string;
+  answer?: string;
+  completeness?: number;
+  improvements?: string;
+}
 
 // Types for WebSocket messages from server
 interface ServerMessage {
@@ -104,6 +115,7 @@ interface TerminalContextType {
   // Callbacks for XTerminal
   onTerminalOutput: ((data: string) => void) | null;
   setOnTerminalOutput: (callback: (data: string) => void) => void;
+  setOnGeminiTerminalOutput: (callback: (data: string) => void) => void;
 
   // TaskMaster sync
   taskMasterTasks: TaskMasterTask[];
@@ -112,6 +124,19 @@ interface TerminalContextType {
   geminiStatus: 'initializing' | 'ready' | 'error';
   onGeminiMessage: ((message: { type: string; response?: string; error?: string; requestId?: string }) => void) | null;
   setOnGeminiMessage: (callback: (message: { type: string; response?: string; error?: string; requestId?: string }) => void) => void;
+  
+  // Gemini Terminal state
+  geminiTerminalReady: boolean;
+  geminiQuestions: Question[];
+  geminiAnswers: Record<string, string>;
+  geminiCompleteness: number;
+  geminiImprovements: string | null;
+  
+  // Gemini Terminal actions
+  startGeminiSession: (docType: DocumentType, currentContent: string) => void;
+  sendGeminiQuestion: (questionId: string, answer: string) => void;
+  getGeminiImprovements: () => Promise<string | null>;
+  closeGeminiSession: () => void;
 }
 
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined);
@@ -149,12 +174,22 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [onTerminalOutput, setOnTerminalOutputState] = useState<((data: string) => void) | null>(null);
   const onTerminalOutputRef = useRef<((data: string) => void) | null>(null);
   
+  // Gemini terminal output callback
+  const onGeminiTerminalOutputRef = useRef<((data: string) => void) | null>(null);
+  
   // TaskMaster state
   const [taskMasterTasks, setTaskMasterTasks] = useState<TaskMasterTask[]>([]);
 
   // Gemini CLI state
   const [geminiStatus, setGeminiStatus] = useState<'initializing' | 'ready' | 'error'>('initializing');
   const [onGeminiMessage, setOnGeminiMessageState] = useState<((message: { type: string; response?: string; error?: string; requestId?: string }) => void) | null>(null);
+  
+  // Gemini Terminal state
+  const [geminiTerminalReady, setGeminiTerminalReady] = useState(false);
+  const [geminiQuestions, setGeminiQuestions] = useState<Question[]>([]);
+  const [geminiAnswers, setGeminiAnswers] = useState<Record<string, string>>({});
+  const [geminiCompleteness, setGeminiCompleteness] = useState(0);
+  const [geminiImprovements, setGeminiImprovements] = useState<string | null>(null);
 
   // Convert TaskMaster task to Orbit task format
   const convertTaskMasterToOrbit = (task: TaskMasterTask, index: number) => {
@@ -286,6 +321,56 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         }
         break;
         
+      case 'gemini:terminal:ready':
+        setGeminiTerminalReady(true);
+        break;
+        
+      case 'gemini:terminal:output':
+        if (message.data && onGeminiTerminalOutputRef.current) {
+          onGeminiTerminalOutputRef.current(message.data);
+        }
+        break;
+        
+      case 'gemini:question:new': {
+        const msg = message as GeminiServerMessage;
+        if (msg.question) {
+          setGeminiQuestions((prev) => {
+            const newQuestions = [...prev, msg.question!];
+            return newQuestions.filter((q): q is Question => q !== undefined);
+          });
+        }
+        break;
+      }
+        
+      case 'gemini:question:answered': {
+        const msg = message as GeminiServerMessage;
+        if (msg.questionId && msg.answer) {
+          const questionId = String(msg.questionId);
+          const answer = String(msg.answer);
+          setGeminiAnswers((prev) => ({
+            ...prev,
+            [questionId]: answer,
+          }));
+        }
+        break;
+      }
+        
+      case 'gemini:completeness': {
+        const msg = message as GeminiServerMessage;
+        if (msg.completeness !== undefined) {
+          setGeminiCompleteness(msg.completeness);
+        }
+        break;
+      }
+        
+      case 'gemini:improvements': {
+        const msg = message as GeminiServerMessage;
+        if (msg.improvements) {
+          setGeminiImprovements(msg.improvements);
+        }
+        break;
+      }
+        
       case 'error':
         console.error('[Server Error]', message.message);
         break;
@@ -315,7 +400,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     disconnectWebSocket();
     wsClientRef.current = null;
     setIsBackendConnected(false);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-connect on mount
   useEffect(() => {
@@ -351,6 +436,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       loadPreferences();
       loadFavoriteCommands();
     }
+    // eslint-disable-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Load/create session when project changes
@@ -359,6 +445,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       loadOrCreateSession();
       loadSessionHistory();
     }
+    // eslint-disable-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
   // Send input to backend
@@ -792,6 +879,81 @@ nothing to commit, working tree clean
     return false;
   };
 
+  // Set Gemini terminal output callback
+  const setOnGeminiTerminalOutput = useCallback((callback: (data: string) => void) => {
+    onGeminiTerminalOutputRef.current = callback;
+  }, []);
+
+  // Gemini Terminal methods
+  const startGeminiSession = useCallback((docType: DocumentType, currentContent: string) => {
+    if (!wsClientRef.current?.isConnected()) {
+      console.error('[Gemini] Cannot start session - backend not connected');
+      return;
+    }
+    
+    // Reset state
+    setGeminiTerminalReady(false);
+    setGeminiQuestions([]);
+    setGeminiAnswers({});
+    setGeminiCompleteness(0);
+    setGeminiImprovements(null);
+    
+    // Send start message
+    wsClientRef.current.send({
+      type: 'gemini:terminal:start',
+      docType,
+      currentContent,
+    });
+  }, []);
+
+  const sendGeminiQuestion = useCallback((questionId: string, answer: string) => {
+    if (!wsClientRef.current?.isConnected()) {
+      console.error('[Gemini] Cannot send answer - backend not connected');
+      return;
+    }
+    
+    wsClientRef.current.send({
+      type: 'gemini:question:answer',
+      questionId,
+      answer,
+    });
+    
+    // Update local state immediately
+    setGeminiAnswers((prev) => ({
+      ...prev,
+      [questionId]: answer,
+    }));
+  }, []);
+
+  const getGeminiImprovements = useCallback(async (): Promise<string | null> => {
+    if (!wsClientRef.current?.isConnected()) {
+      console.error('[Gemini] Cannot get improvements - backend not connected');
+      return null;
+    }
+    
+    wsClientRef.current.send({
+      type: 'gemini:get:improvements',
+    });
+    
+    // Return improvements if already available, otherwise wait
+    return geminiImprovements;
+  }, [geminiImprovements]);
+
+  const closeGeminiSession = useCallback(() => {
+    if (wsClientRef.current?.isConnected()) {
+      wsClientRef.current.send({
+        type: 'gemini:terminal:close',
+      });
+    }
+    
+    // Reset state
+    setGeminiTerminalReady(false);
+    setGeminiQuestions([]);
+    setGeminiAnswers({});
+    setGeminiCompleteness(0);
+    setGeminiImprovements(null);
+  }, []);
+
   const value: TerminalContextType = {
     connectionStatus,
     isBackendConnected,
@@ -822,10 +984,20 @@ nothing to commit, working tree clean
     disconnectBackend,
     onTerminalOutput,
     setOnTerminalOutput,
+    setOnGeminiTerminalOutput,
     taskMasterTasks,
     geminiStatus,
     onGeminiMessage,
     setOnGeminiMessage,
+    geminiTerminalReady,
+    geminiQuestions,
+    geminiAnswers,
+    geminiCompleteness,
+    geminiImprovements,
+    startGeminiSession,
+    sendGeminiQuestion,
+    getGeminiImprovements,
+    closeGeminiSession,
   };
 
   return <TerminalContext.Provider value={value}>{children}</TerminalContext.Provider>;

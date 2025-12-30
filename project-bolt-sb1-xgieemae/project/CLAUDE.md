@@ -73,7 +73,7 @@ Developers who use AI coding assistants (Copilot, Claude Code, ChatGPT) and want
 - Auto-save form inputs to prevent data loss
 
 ### When Adding New Features
-- Follow the stage-based workflow (Vision → Strategy → Workbench → Testing)
+- Follow the phase-based workflow (Vision → Strategy → Workbench → Testing)
 - Maintain the "Context is King" philosophy
 - Ensure new features integrate with existing context clipping
 - Update relevant markdown export functionality
@@ -90,10 +90,10 @@ Developers who use AI coding assistants (Copilot, Claude Code, ChatGPT) and want
 ✅ Database schema with RLS policies
 ✅ Authentication system (email/password)
 ✅ Project management and switching
-✅ Vision & User Profile stage (Stage 1)
-✅ Strategy & Task Management stage (Stage 2)
-✅ Workbench with Context Clipper (Stage 3)
-✅ Testing & Deployment stage (Stage 4)
+✅ Vision & User Profile phase (Phase 1)
+✅ Strategy & Task Management phase (Phase 2)
+✅ Workbench with Context Clipper (Phase 3)
+✅ Testing & Deployment phase (Phase 4)
 ✅ Settings & MCP Integration hub
 ✅ Responsive dark-themed UI
 ✅ Auto-save functionality

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   Lightbulb,
@@ -8,13 +8,13 @@ import {
   Loader2,
   CheckCircle,
   AlertTriangle,
-  Settings,
-  ChevronRight,
 } from 'lucide-react';
 import { Button } from './Button';
 import { useTerminal } from '../../contexts/TerminalContext';
 import { getHelperPrompt, type PromptContext } from '../../lib/promptConfig';
 import type { ContentType, EvaluationResult } from '../../lib/gemini';
+import { GeminiTerminalModal } from '../stages/vision/GeminiTerminalModal';
+import type { DocumentType } from '../../lib/foundationContext';
 
 interface AIHelperButtonProps {
   content: string;
@@ -44,6 +44,7 @@ export function AIHelperButton({
   disabled = false,
 }: AIHelperButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeAction, setActiveAction] = useState<AIAction | null>(null);
   const [state, setState] = useState<ActionState>({
     loading: false,
@@ -57,6 +58,10 @@ export function AIHelperButton({
 
   const { wsClient, isBackendConnected, geminiStatus } = useTerminal();
   const isReady = isBackendConnected && geminiStatus === 'ready';
+  
+  // Check if this is a Foundation document type
+  const isFoundationDoc = contentType === 'vision' || contentType === 'userProfile';
+  const docType: DocumentType | null = contentType === 'vision' ? 'vision' : contentType === 'userProfile' ? 'userProfile' : null;
 
   // Close popover when clicking outside
   useEffect(() => {
@@ -99,12 +104,6 @@ export function AIHelperButton({
     try {
       // Build prompt using helper function
       const prompt = getHelperPrompt(action, contentType, content);
-      
-      // Determine context based on contentType
-      let context: PromptContext = 'general';
-      if (contentType === 'vision') context = 'vision';
-      else if (contentType === 'userProfile') context = 'userProfile';
-      else if (contentType === 'prd' || contentType === 'feature') context = 'strategy';
 
       // Send directly via WebSocket
       const requestId = `ai-helper-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -147,21 +146,42 @@ export function AIHelperButton({
     return 'text-red-400 bg-red-900/30 border-red-700/50';
   };
 
+  const handleButtonClick = () => {
+    if (isFoundationDoc && docType) {
+      // Open Gemini Terminal Modal for Foundation documents
+      setIsModalOpen(true);
+    } else {
+      // Use existing popover for other content types
+      setIsOpen(!isOpen);
+    }
+  };
+
   return (
     <div className={`relative inline-flex ${className}`}>
       <button
         ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleButtonClick}
         disabled={disabled}
         className={`p-1.5 rounded-lg transition-all ${
-          isOpen
+          isOpen || isModalOpen
             ? 'bg-purple-600 text-white'
             : 'bg-purple-900/30 text-purple-400 hover:bg-purple-900/50 hover:text-purple-300'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        title="AI Assistant"
+        title={isFoundationDoc ? "Gemini CLI Assistant" : "AI Assistant"}
       >
         <Sparkles className="w-4 h-4" />
       </button>
+
+      {/* Gemini Terminal Modal for Foundation documents */}
+      {isFoundationDoc && docType && (
+        <GeminiTerminalModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          docType={docType}
+          currentContent={content}
+          onApplyImprovements={onImprove}
+        />
+      )}
 
       {isOpen && (
         <div

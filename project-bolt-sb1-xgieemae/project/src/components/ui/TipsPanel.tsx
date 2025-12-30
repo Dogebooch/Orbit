@@ -199,7 +199,7 @@ export function TipsPanel({ isOpen, onClose, currentStage }: TipsPanelProps) {
                     isCurrentStage ? 'ring-1 ring-primary-600' : ''
                   }`}
                 >
-                  {/* Stage Header */}
+                  {/* Phase Header */}
                   <button
                     onClick={() => toggleStage(stage)}
                     className={`w-full flex items-center justify-between p-3 text-left hover:bg-primary-800/50 transition-colors ${

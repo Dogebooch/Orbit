@@ -148,7 +148,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
   }, [currentProject, user]);
 
   const stages = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Project Overview', shortcut: '0', noCompletion: true },
+    { id: 'dashboard', name: 'Setup Guide', icon: LayoutDashboard, description: 'Project Setup Guide', shortcut: '0', noCompletion: true },
     { id: 'setup', name: 'Setup', icon: Package, description: 'Prerequisites', shortcut: '1' },
     { id: 'vision', name: 'Foundation', icon: Lightbulb, description: 'Vision & User', shortcut: '2' },
     { id: 'strategy', name: 'Strategy', icon: ListChecks, description: 'PRD & Launch', shortcut: '3' },
@@ -160,7 +160,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
   const completedCount = Object.values(completion).filter(Boolean).length;
   const totalCount = Object.keys(completion).length;
 
-  // Calculate tip count for current stage
+  // Calculate tip count for current phase
   const currentStageTipCount = useMemo(() => {
     if (!currentStage) return 0;
     const dismissedTips = getDismissedTips();
@@ -216,7 +216,7 @@ export function Sidebar({ onStageChange }: SidebarProps) {
                 }
               }}
               disabled={isLocked}
-              title={isLocked ? 'Complete the PRD in Strategy stage to unlock' : undefined}
+              title={isLocked ? 'Complete the PRD in Strategy phase to unlock' : undefined}
               className={`w-full flex items-start gap-3 p-3 rounded-lg transition-all duration-200 group ${
                 isLocked
                   ? 'text-primary-600 cursor-not-allowed opacity-60'

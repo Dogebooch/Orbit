@@ -32,9 +32,27 @@ const authMock = {
   }
 };
 
+// Mock channel for real-time subscriptions (no-op for local-first app)
+const createMockChannel = (name: string) => {
+  return {
+    on: (_event: string, _config: any, _callback: () => void) => {
+      // Return self for chaining
+      return createMockChannel(name);
+    },
+    subscribe: () => {
+      // No-op subscription for local-first app
+      return { status: 'SUBSCRIBED' };
+    },
+  };
+};
+
 export const supabase = {
   ...localDb,
-  auth: authMock
+  auth: authMock,
+  channel: (name: string) => createMockChannel(name),
+  removeChannel: (_channel: any) => {
+    // No-op for local-first app
+  },
 };
 
 export type Database = {

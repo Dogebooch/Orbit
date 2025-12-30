@@ -118,6 +118,8 @@ export interface Prompt {
   content: string;
   category: string;
   is_favorite: boolean;
+  source?: string | null;
+  is_default?: boolean;
   created_at: string;
 }
 

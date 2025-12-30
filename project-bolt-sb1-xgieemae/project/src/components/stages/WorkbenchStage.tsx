@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Code2, BookMarked, ExternalLink, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { TerminalPanel } from '../workbench/TerminalPanel';
-import { TaskBoard } from '../workbench/TaskBoard';
+import { TaskList } from '../workbench/TaskList';
 import { DevelopmentLoopHelper } from '../workbench/DevelopmentLoopHelper';
 import { Card, Button, Tooltip } from '../ui';
 import { useApp } from '../../contexts/AppContext';
@@ -119,19 +119,12 @@ export function WorkbenchStage() {
         />
       </div>
 
-      {/* Main Content Area: TaskBoard and Terminal side by side */}
+      {/* Main Content Area: Terminal (main, left) | Task List (right column) */}
       <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
-        {/* Left Column: TaskBoard */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          <div className="flex-1 overflow-y-auto">
-            <TaskBoard />
-          </div>
-        </div>
-
-        {/* Right Column: Terminal and Context Tools */}
-        <div className="flex-1 flex flex-col gap-3 overflow-hidden min-w-0">
-          {/* Terminal */}
-          <div className="flex-shrink-0">
+        {/* Left Column: Terminal (main focus) */}
+        <div className="flex-[2] flex flex-col gap-3 overflow-hidden min-w-0">
+          {/* Terminal - Main Focus */}
+          <div className="flex-1 min-h-0">
             <TerminalPanel />
           </div>
 
@@ -241,6 +234,11 @@ export function WorkbenchStage() {
         )}
         </Card>
           </div>
+        </div>
+
+        {/* Right Column: Task List (narrow) */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 max-w-md">
+          <TaskList />
         </div>
       </div>
     </div>

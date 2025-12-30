@@ -1,72 +1,86 @@
-// WebSocket Message Types
+/**
+ * Type definitions for WebSocket messages and sessions
+ */
 
-// Frontend -> Backend messages
-export type ClientMessage =
-  | { type: 'terminal:input'; data: string }
-  | { type: 'terminal:resize'; cols: number; rows: number }
-  | { type: 'config:setWorkingDir'; path: string }
-  | { type: 'config:getWorkingDir' }
-  | { type: 'config:writeFile'; relativePath: string; content: string }
-  | { type: 'config:createDir'; relativePath: string }
-  | { type: 'gemini:send'; prompt: string; context?: string; requestId?: string }
-  | { type: 'gemini:initialize'; projectContext?: ProjectContext }
-  | { type: 'project:clearFolder'; projectId: string };
+import type { WebSocket } from 'ws';
 
-// Backend -> Frontend messages
-export type ServerMessage =
-  | { type: 'terminal:output'; data: string }
-  | { type: 'terminal:exit'; code: number }
-  | { type: 'terminal:ready' }
-  | { type: 'file:changed'; path: string; event: 'add' | 'change' | 'unlink' }
-  | { type: 'tasks:updated'; tasks: TaskMasterTask[] }
-  | { type: 'config:workingDir'; path: string }
-  | { type: 'config:writeResult'; success: boolean; path: string; error?: string }
-  | { type: 'connection:status'; connected: boolean }
-  | { type: 'error'; message: string }
-  | { type: 'gemini:response'; response: string; requestId?: string }
-  | { type: 'gemini:error'; error: string; requestId?: string }
-  | { type: 'gemini:status'; status: 'initializing' | 'ready' | 'error' }
-  | { type: 'project:clearFolderResult'; success: boolean; error?: string };
+// Local type definitions (duplicated from frontend to avoid runtime dependencies)
+export type DocumentType = 'vision' | 'userProfile' | 'metrics';
 
-// TaskMaster task format (from .taskmaster/tasks/tasks.json)
-export interface TaskMasterTask {
-  id: number;
-  title: string;
-  description: string;
-  status: 'pending' | 'in-progress' | 'done' | 'blocked';
-  priority: 'high' | 'medium' | 'low';
-  dependencies: number[];
-  subtasks?: TaskMasterTask[];
-  details?: string;
-  testStrategy?: string;
-}
-
-// Orbit task format (for frontend sync)
-export interface OrbitTask {
+export interface Question {
   id: string;
-  title: string;
-  description: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  priority: number;
-  order_index: number;
-  acceptance_criteria: string;
-  notes: string;
+  text: string;
+  type: 'multiple-choice' | 'yes-no' | 'scale';
+  choices: string[];
+  required: boolean;
+  context: string;
 }
 
-// Server configuration
-export interface ServerConfig {
+// WebSocket message types from client
+export interface ClientMessage {
+  type: string;
+  data?: string;
+  cols?: number;
+  rows?: number;
+  path?: string;
+  docType?: DocumentType;
+  currentContent?: string;
+  questionId?: string;
+  answer?: string;
+  requestId?: string;
+  prompt?: string;
+}
+
+// WebSocket message types to client
+export interface ServerMessage {
+  type: string;
+  data?: string;
+  code?: number;
+  path?: string;
+  event?: 'add' | 'change' | 'unlink';
+  connected?: boolean;
+  message?: string;
+  response?: string;
+  error?: string;
+  requestId?: string;
+  status?: 'initializing' | 'ready' | 'error';
+  question?: Question;
+  questionId?: string;
+  answer?: string;
+  completeness?: number;
+  improvements?: string;
+}
+
+// Session types
+export interface TerminalSession {
+  id: string;
+  ws: WebSocket;
+  pty: any; // node-pty IPty type
   workingDirectory: string;
-  watchEnabled: boolean;
+  type: 'terminal' | 'gemini';
 }
 
-// Project context for Gemini CLI initialization
-export interface ProjectContext {
-  projectName?: string;
-  techStack?: {
-    languages: string[];
-    frameworks: string[];
+export interface GeminiSession {
+  id: string;
+  ws: WebSocket;
+  terminal: any; // GeminiTerminal instance
+  docType: DocumentType;
+  currentContent: string;
+  context: {
+    answers: Record<string, string>;
+    askedQuestions: Set<string>;
   };
-  generatedFiles?: string[];
-  description?: string;
+}
+
+// Re-export for convenience
+export type { Question };
+
+// Connection info
+export interface ConnectionInfo {
+  id: string;
+  ws: WebSocket;
+  terminalSession?: TerminalSession;
+  geminiSession?: GeminiSession;
+  connectedAt: Date;
 }
 

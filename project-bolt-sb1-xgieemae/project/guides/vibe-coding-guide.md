@@ -4,4 +4,3 @@
 > 
 > For now, this is a placeholder. The PDF extraction script encountered module compatibility issues.
 > You can manually extract the PDF content and paste it here, or we can fix the extraction script later.
-

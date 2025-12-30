@@ -1,0 +1,1 @@
+I have a PRD at scripts/prd.txt. Can you parse it and set up initial tasks?

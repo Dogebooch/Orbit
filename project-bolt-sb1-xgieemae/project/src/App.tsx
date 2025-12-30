@@ -11,7 +11,7 @@ import { WorkbenchStage } from './components/stages/WorkbenchStage';
 import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
 import { TestingStage } from './components/stages/TestingStage';
 import { SettingsStage } from './components/stages/SettingsStage';
-import { DashboardStage } from './components/stages/DashboardStage';
+import { SetupGuideStage } from './components/stages/SetupGuideStage';
 import { CommandPalette, CommandIcons } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { AlertCircle, LayoutDashboard, Package } from 'lucide-react';
@@ -46,7 +46,7 @@ function App() {
 
   // Commands for command palette
   const commands = [
-    { id: 'dashboard', label: 'Go to Dashboard', description: 'View project overview', icon: LayoutDashboard, action: () => handleStageChange('dashboard'), keywords: ['home', 'overview'] },
+    { id: 'dashboard', label: 'Go to Setup Guide', description: 'View setup guide', icon: LayoutDashboard, action: () => handleStageChange('dashboard'), keywords: ['home', 'overview', 'guide'] },
     { id: 'setup', label: 'Go to Setup', description: 'Prerequisites', icon: Package, action: () => handleStageChange('setup'), keywords: ['prerequisites', 'start'] },
     { id: 'vision', label: 'Go to Foundation', description: 'Vision & User Profile', icon: CommandIcons.Lightbulb, action: () => handleStageChange('vision'), keywords: ['foundation'] },
     { id: 'strategy', label: 'Go to Strategy', description: 'PRD & Launch', icon: CommandIcons.ListChecks, action: () => handleStageChange('strategy'), keywords: ['prd', 'tasks', 'launch'] },
@@ -75,7 +75,7 @@ function App() {
 
     switch (localStage) {
       case 'dashboard':
-        return <DashboardStage onNavigate={handleStageChange} />;
+        return <SetupGuideStage />;
       case 'setup':
         return <SetupStage />;
       case 'vision':
@@ -91,7 +91,7 @@ function App() {
       case 'settings':
         return <SettingsStage />;
       default:
-        return <DashboardStage onNavigate={handleStageChange} />;
+        return <SetupGuideStage />;
     }
   };
 

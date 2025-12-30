@@ -1,431 +1,256 @@
+/**
+ * Orbit Terminal Server
+ * Express + WebSocket server for terminal and Gemini CLI integration
+ */
+
 import express from 'express';
-import cors from 'cors';
-import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import fs from 'fs';
-import path from 'path';
-import { TerminalManager } from './terminal.js';
-import { FileWatcher } from './watcher.js';
-import { TaskMasterSync } from './taskmaster.js';
-import { GeminiCLIManager } from './gemini.js';
-import type { ClientMessage, ServerMessage, ServerConfig, ProjectContext } from './types.js';
+import * as http from 'http';
+import dotenv from 'dotenv';
+import { Terminal } from './terminal';
+import {
+  handleGeminiTerminalStart,
+  handleGeminiTerminalInput,
+  handleGeminiTerminalResize,
+  handleGeminiQuestionAnswer,
+  handleGeminiGetImprovements,
+  handleGeminiTerminalClose,
+} from './geminiHandler';
+import {
+  createConnection,
+  getConnection,
+  removeConnection,
+  setTerminalSession,
+} from './sessions';
+import type { ClientMessage, ServerMessage, TerminalSession } from './types';
+
+// Load environment variables
+dotenv.config();
 
 const PORT = process.env.PORT || 3001;
-const HOST = '127.0.0.1'; // Localhost only for security
-
-// Server configuration
-const config: ServerConfig = {
-  workingDirectory: process.cwd(),
-  watchEnabled: true,
-};
-
-// Express app setup
 const app = express();
-app.use(cors());
-app.use(express.json());
+const server = http.createServer(app);
 
 // Health check endpoint
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    workingDirectory: config.workingDirectory,
-    timestamp: new Date().toISOString(),
-  });
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-// Config endpoint
-app.get('/config', (_req, res) => {
-  res.json(config);
-});
-
-app.post('/config', (req, res) => {
-  const { workingDirectory } = req.body;
-  if (workingDirectory) {
-    config.workingDirectory = workingDirectory;
-    res.json({ success: true, config });
-  } else {
-    res.status(400).json({ error: 'workingDirectory is required' });
-  }
-});
-
-// Create HTTP server
-const server = createServer(app);
 
 // WebSocket server
 const wss = new WebSocketServer({ server });
 
-// Track connected clients
-const clients = new Set<WebSocket>();
-
-// Broadcast message to all connected clients
-function broadcast(message: ServerMessage): void {
-  const data = JSON.stringify(message);
-  clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  });
+// Helper to send message to client
+function sendMessage(ws: WebSocket, message: ServerMessage): void {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+  }
 }
 
-// Initialize services
-let terminal: TerminalManager | null = null;
-let fileWatcher: FileWatcher | null = null;
-let taskMasterSync: TaskMasterSync | null = null;
-let geminiCLI: GeminiCLIManager | null = null;
-
-function initializeServices(ws: WebSocket): void {
-  // Create terminal manager for this connection
-  terminal = new TerminalManager(
-    (msg) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(msg));
-      }
-    },
-    config.workingDirectory
-  );
-
-  // Create file watcher
-  fileWatcher = new FileWatcher((msg) => {
-    broadcast(msg);
-    // Check if this is a tasks.json change
-    if (msg.type === 'file:changed' && taskMasterSync) {
-      taskMasterSync.handleFileChange(msg.path);
-    }
-  });
-
-  // Create TaskMaster sync
-  taskMasterSync = new TaskMasterSync(broadcast);
-  taskMasterSync.setProjectPath(config.workingDirectory);
-
-  // Create Gemini CLI manager
-  geminiCLI = new GeminiCLIManager(
-    (msg) => {
-      broadcast(msg as ServerMessage);
-    },
-    {
-      workingDirectory: config.workingDirectory,
-    }
-  );
-
-  // Start terminal
-  terminal.start();
-
-  // Start file watcher if enabled
-  if (config.watchEnabled && config.workingDirectory) {
-    fileWatcher.start(config.workingDirectory);
-    // Initial TaskMaster sync
-    taskMasterSync.checkAndSync();
-  }
-
-  // Initialize Gemini CLI (async, don't wait)
-  geminiCLI.initialize().catch((error) => {
-    console.error('[Gemini CLI] Failed to initialize:', error);
-  });
-}
-
-function cleanupServices(): void {
-  if (terminal) {
-    terminal.stop();
-    terminal = null;
-  }
-  if (fileWatcher) {
-    fileWatcher.stop();
-    fileWatcher = null;
-  }
-  if (geminiCLI) {
-    geminiCLI.stop();
-    geminiCLI = null;
-  }
-  taskMasterSync = null;
-}
-
-// WebSocket connection handler
+// Handle WebSocket connections
 wss.on('connection', (ws: WebSocket) => {
-  console.log('[WebSocket] Client connected');
-  clients.add(ws);
+  const connectionId = createConnection(ws);
+  console.log(`[Server] New WebSocket connection: ${connectionId}`);
 
-  // Send initial connection status
-  ws.send(JSON.stringify({
+  // Send connection status
+  sendMessage(ws, {
     type: 'connection:status',
     connected: true,
-  } satisfies ServerMessage));
-
-  // Send current working directory
-  ws.send(JSON.stringify({
-    type: 'config:workingDir',
-    path: config.workingDirectory,
-  } satisfies ServerMessage));
-
-  // Initialize services for this connection
-  initializeServices(ws);
+  });
 
   // Handle incoming messages
   ws.on('message', (data: Buffer) => {
     try {
       const message: ClientMessage = JSON.parse(data.toString());
-      handleClientMessage(message, ws);
+      handleMessage(connectionId, message, ws);
     } catch (error) {
-      console.error('[WebSocket] Failed to parse message:', error);
-      ws.send(JSON.stringify({
+      console.error('[Server] Error parsing message:', error);
+      sendMessage(ws, {
         type: 'error',
         message: 'Invalid message format',
-      } satisfies ServerMessage));
+      });
     }
   });
 
-  // Handle close
+  // Handle disconnect
   ws.on('close', () => {
-    console.log('[WebSocket] Client disconnected');
-    clients.delete(ws);
-    
-    // Cleanup if no more clients
-    if (clients.size === 0) {
-      cleanupServices();
-    }
+    console.log(`[Server] WebSocket disconnected: ${connectionId}`);
+    removeConnection(connectionId);
   });
 
-  // Handle errors
   ws.on('error', (error) => {
-    console.error('[WebSocket] Error:', error);
-    clients.delete(ws);
+    console.error(`[Server] WebSocket error for ${connectionId}:`, error);
+    removeConnection(connectionId);
   });
 });
 
-function handleClientMessage(message: ClientMessage, ws: WebSocket): void {
+// Message handler
+function handleMessage(connectionId: string, message: ClientMessage, ws: WebSocket): void {
+  const connection = getConnection(connectionId);
+  if (!connection) {
+    console.error(`[Server] Connection ${connectionId} not found`);
+    return;
+  }
+
   switch (message.type) {
-    case 'terminal:input':
-      if (terminal) {
-        terminal.write(message.data);
-      }
-      break;
-
-    case 'terminal:resize':
-      if (terminal) {
-        terminal.resize(message.cols, message.rows);
-      }
-      break;
-
-    case 'config:setWorkingDir':
-      console.log(`[Config] Setting working directory to: ${message.path}`);
-      config.workingDirectory = message.path;
-      
-      // Update terminal working directory
-      if (terminal) {
-        terminal.setWorkingDirectory(message.path);
-      }
-      
-      // Restart file watcher with new path
-      if (fileWatcher) {
-        fileWatcher.stop();
-        fileWatcher.start(message.path);
-      }
-      
-      // Update TaskMaster path
-      if (taskMasterSync) {
-        taskMasterSync.setProjectPath(message.path);
-        taskMasterSync.checkAndSync();
-      }
-      
-      // Confirm to client
-      ws.send(JSON.stringify({
-        type: 'config:workingDir',
-        path: message.path,
-      } satisfies ServerMessage));
-      break;
-
-    case 'config:getWorkingDir':
-      ws.send(JSON.stringify({
-        type: 'config:workingDir',
-        path: config.workingDirectory,
-      } satisfies ServerMessage));
-      break;
-
-    case 'config:createDir':
-      try {
-        const dirPath = path.join(config.workingDirectory, message.relativePath);
-        console.log(`[Config] Creating directory: ${dirPath}`);
-        
-        // Create directory recursively
-        fs.mkdirSync(dirPath, { recursive: true });
-        
-        ws.send(JSON.stringify({
-          type: 'config:writeResult',
-          success: true,
-          path: message.relativePath,
-        } satisfies ServerMessage));
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[Config] Failed to create directory:', errorMessage);
-        ws.send(JSON.stringify({
-          type: 'config:writeResult',
-          success: false,
-          path: message.relativePath,
-          error: errorMessage,
-        } satisfies ServerMessage));
-      }
-      break;
-
-    case 'config:writeFile':
-      try {
-        const filePath = path.join(config.workingDirectory, message.relativePath);
-        const dirName = path.dirname(filePath);
-        
-        console.log(`[Config] Writing file: ${filePath}`);
-        
-        // Ensure directory exists
-        if (!fs.existsSync(dirName)) {
-          fs.mkdirSync(dirName, { recursive: true });
-        }
-        
-        // Write the file
-        fs.writeFileSync(filePath, message.content, 'utf-8');
-        
-        ws.send(JSON.stringify({
-          type: 'config:writeResult',
-          success: true,
-          path: message.relativePath,
-        } satisfies ServerMessage));
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[Config] Failed to write file:', errorMessage);
-        ws.send(JSON.stringify({
-          type: 'config:writeResult',
-          success: false,
-          path: message.relativePath,
-          error: errorMessage,
-        } satisfies ServerMessage));
-      }
-      break;
-
-    case 'gemini:initialize':
-      if (geminiCLI && message.projectContext) {
-        // Update project context and reinitialize
-        geminiCLI.stop();
-        geminiCLI = new GeminiCLIManager(
-          (msg) => {
-            broadcast(msg as ServerMessage);
-          },
-          {
-            workingDirectory: config.workingDirectory,
-            projectContext: message.projectContext,
-          }
-        );
-        geminiCLI.initialize().catch((error) => {
-          console.error('[Gemini CLI] Failed to reinitialize:', error);
-          ws.send(JSON.stringify({
-            type: 'gemini:error',
-            error: error instanceof Error ? error.message : 'Failed to initialize',
-          } satisfies ServerMessage));
-        });
-      }
-      break;
-
-    case 'gemini:send':
-      if (geminiCLI) {
-        geminiCLI.sendPrompt(message.prompt, message.requestId).catch((error) => {
-          console.error('[Gemini CLI] Failed to send prompt:', error);
-          ws.send(JSON.stringify({
-            type: 'gemini:error',
-            error: error instanceof Error ? error.message : 'Failed to send prompt',
-            requestId: message.requestId,
-          } satisfies ServerMessage));
-        });
+    // Regular terminal messages
+    case 'terminal:input': {
+      if (connection.terminalSession) {
+        connection.terminalSession.pty.write(message.data || '');
       } else {
-        ws.send(JSON.stringify({
-          type: 'gemini:error',
-          error: 'Gemini CLI not initialized',
-          requestId: message.requestId,
-        } satisfies ServerMessage));
-      }
-      break;
+        // Create new terminal session if it doesn't exist
+        const terminal = new Terminal();
+        terminal.spawn(80, 24);
+        const pty = terminal.getPty();
+        
+        if (pty) {
+          pty.onData((data: string) => {
+            sendMessage(ws, {
+              type: 'terminal:output',
+              data,
+            });
+          });
 
-    case 'project:clearFolder':
-      try {
-        if (!config.workingDirectory) {
-          throw new Error('Working directory not set');
-        }
+          pty.onExit((code: number) => {
+            sendMessage(ws, {
+              type: 'terminal:exit',
+              code,
+            });
+          });
 
-        console.log(`[Project] Clearing folder: ${config.workingDirectory}`);
+          const session: TerminalSession = {
+            id: connectionId,
+            ws,
+            pty,
+            workingDirectory: process.cwd(),
+            type: 'terminal',
+          };
 
-        // Check if directory exists
-        if (!fs.existsSync(config.workingDirectory)) {
-          ws.send(JSON.stringify({
-            type: 'project:clearFolderResult',
-            success: true,
-          } satisfies ServerMessage));
-          break;
-        }
-
-        // Get all files and directories in the working directory
-        const entries = fs.readdirSync(config.workingDirectory, { withFileTypes: true });
-
-        // Delete each entry (files and directories)
-        for (const entry of entries) {
-          const entryPath = path.join(config.workingDirectory, entry.name);
+          setTerminalSession(connectionId, session);
+          sendMessage(ws, { type: 'terminal:ready' });
           
-          try {
-            if (entry.isDirectory()) {
-              // Recursively delete directory
-              fs.rmSync(entryPath, { recursive: true, force: true });
-            } else {
-              // Delete file
-              fs.unlinkSync(entryPath);
-            }
-          } catch (error) {
-            console.warn(`[Project] Failed to delete ${entryPath}:`, error);
-            // Continue with other entries even if one fails
+          // Write the input that triggered this
+          if (message.data) {
+            pty.write(message.data);
           }
         }
-
-        console.log(`[Project] Successfully cleared folder: ${config.workingDirectory}`);
-        
-        ws.send(JSON.stringify({
-          type: 'project:clearFolderResult',
-          success: true,
-        } satisfies ServerMessage));
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[Project] Failed to clear folder:', errorMessage);
-        ws.send(JSON.stringify({
-          type: 'project:clearFolderResult',
-          success: false,
-          error: errorMessage,
-        } satisfies ServerMessage));
       }
       break;
+    }
+
+    case 'terminal:resize': {
+      if (connection.terminalSession && message.cols && message.rows) {
+        connection.terminalSession.pty.resize(message.cols, message.rows);
+      }
+      break;
+    }
+
+    case 'config:setWorkingDir': {
+      if (connection.terminalSession && message.path) {
+        connection.terminalSession.workingDirectory = message.path;
+        connection.terminalSession.pty.write(
+          process.platform === 'win32' ? `cd "${message.path}"\r` : `cd "${message.path}"\n`
+        );
+        sendMessage(ws, {
+          type: 'config:workingDir',
+          path: message.path,
+        });
+      }
+      break;
+    }
+
+    // Gemini terminal messages
+    case 'gemini:terminal:start': {
+      if (message.docType && message.currentContent !== undefined) {
+        handleGeminiTerminalStart(
+          connectionId,
+          message.docType,
+          message.currentContent,
+          process.env.GEMINI_API_KEY,
+          (msg) => sendMessage(ws, msg as ServerMessage)
+        );
+      }
+      break;
+    }
+
+    case 'gemini:terminal:input': {
+      if (message.data) {
+        handleGeminiTerminalInput(connectionId, message.data);
+      }
+      break;
+    }
+
+    case 'gemini:terminal:resize': {
+      if (message.cols && message.rows) {
+        handleGeminiTerminalResize(connectionId, message.cols, message.rows);
+      }
+      break;
+    }
+
+    case 'gemini:question:answer': {
+      if (message.questionId && message.answer) {
+        handleGeminiQuestionAnswer(
+          connectionId,
+          message.questionId,
+          message.answer,
+          (msg) => sendMessage(ws, msg as ServerMessage)
+        );
+      }
+      break;
+    }
+
+    case 'gemini:get:improvements': {
+      handleGeminiGetImprovements(
+        connectionId,
+        (msg) => sendMessage(ws, msg as ServerMessage)
+      );
+      break;
+    }
+
+    case 'gemini:terminal:close': {
+      handleGeminiTerminalClose(connectionId);
+      break;
+    }
+
+    // Legacy Gemini API messages (for backward compatibility)
+    case 'gemini:send': {
+      // This is handled by the old API system, just acknowledge
+      sendMessage(ws, {
+        type: 'gemini:status',
+        status: 'ready',
+      });
+      break;
+    }
 
     default:
-      console.warn('[WebSocket] Unknown message type:', (message as { type: string }).type);
+      console.log(`[Server] Unknown message type: ${message.type}`);
   }
 }
 
 // Start server
-server.listen(Number(PORT), HOST, () => {
-  console.log(`
-╔════════════════════════════════════════════════════════════╗
-║                   Orbit Backend Server                      ║
-╠════════════════════════════════════════════════════════════╣
-║  Status:    Running                                         ║
-║  Address:   http://${HOST}:${PORT}                              ║
-║  WebSocket: ws://${HOST}:${PORT}                                ║
-║  Working:   ${config.workingDirectory.slice(0, 40).padEnd(40)}║
-╚════════════════════════════════════════════════════════════╝
-  `);
+server.listen(PORT, () => {
+  console.log(`[Server] Orbit Terminal Server running on port ${PORT}`);
+  console.log(`[Server] Health check: http://localhost:${PORT}/health`);
+  console.log(`[Server] WebSocket: ws://localhost:${PORT}`);
 });
 
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n[Server] Shutting down...');
-  cleanupServices();
-  wss.close();
-  server.close();
-  process.exit(0);
-});
-
+// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('\n[Server] Received SIGTERM, shutting down...');
-  cleanupServices();
-  wss.close();
-  server.close();
-  process.exit(0);
+  console.log('[Server] SIGTERM received, shutting down gracefully...');
+  wss.close(() => {
+    server.close(() => {
+      console.log('[Server] Shutdown complete');
+      process.exit(0);
+    });
+  });
 });
+
+process.on('SIGINT', () => {
+  console.log('[Server] SIGINT received, shutting down gracefully...');
+  wss.close(() => {
+    server.close(() => {
+      console.log('[Server] Shutdown complete');
+      process.exit(0);
+    });
+  });
+});
+

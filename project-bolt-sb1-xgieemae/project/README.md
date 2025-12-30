@@ -8,19 +8,19 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
 
 ## Features
 
-### 🎯 Stage 1: Foundation (Vision & User)
+### 🎯 Phase 1: Foundation (Vision & User)
 - **Vision Board**: Define your project's problem, target user, success metrics, and rationale
 - **User Persona Builder**: Create detailed user profiles with technical comfort, frustrations, and goals
 - **Export to Markdown**: Generate `0_vision.md` and `1_user_profile.md` files
 - **Validation**: Ensures complete foundation before moving forward
 
-### 📋 Stage 2: Strategy (Tasks & PRD)
+### 📋 Phase 2: Strategy (Tasks & PRD)
 - **PRD Editor**: Write and maintain your Product Requirements Document with markdown support
 - **Visual Task Board**: Create, organize, and track tasks with status management
 - **Task Generation Guide**: Instructions for integrating TaskMaster AI
 - **Auto-save**: All changes are automatically saved to Supabase
 
-### 💻 Stage 3: Workbench (Build & Code)
+### 💻 Phase 3: Workbench (Build & Code)
 - **Integrated Terminal**: Real terminal with xterm.js and PTY backend
   - Full PowerShell/Bash support
   - Run Claude Code CLI directly (`claude` command)
@@ -35,7 +35,7 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
 - **TaskMaster Integration**: Auto-syncs with `.taskmaster/tasks/tasks.json`
 - **File Watching**: Real-time updates when project files change
 
-### 🚀 Stage 4: Testing & Deployment
+### 🚀 Phase 4: Testing & Deployment
 - **Interactive Validation Checklist**: Track testing progress with visual completion meter
 - **User Testing Guide**: Step-by-step instructions for validating with real users
 - **Deployment Configurations**: Ready-to-use configs for Vercel, Netlify, Railway
@@ -84,7 +84,7 @@ Most AI workflows fail because the model forgets the **Why** (Vision) and **Who*
 
 The app uses a comprehensive Supabase schema:
 
-- **projects**: Project metadata and current stage tracking
+- **projects**: Project metadata and current phase tracking
 - **visions**: Problem statements and project vision
 - **user_profiles**: Target user personas and requirements
 - **tasks**: Project tasks with status and priority
@@ -157,8 +157,8 @@ The integrated terminal requires the backend server running locally. Features:
 
 1. **Sign up** for an account (email + password)
 2. **Create a project** using the project selector
-3. **Complete the Foundation stage** (Vision & User Profile)
-4. **Progress through stages** linearly for best results
+3. **Complete the Foundation phase** (Vision & User Profile)
+4. **Progress through phases** linearly for best results
 
 ## Project Structure
 
@@ -197,7 +197,7 @@ The Vibe Coding workflow follows a linear progression:
 3. **Workbench** → Build with AI assistants using context clipping
 4. **Testing** → Validate and prepare for deployment
 
-Each stage builds on the previous one, ensuring your AI assistants always have the necessary context to generate appropriate code.
+Each phase builds on the previous one, ensuring your AI assistants always have the necessary context to generate appropriate code.
 
 ## Key Features Explained
 
@@ -227,7 +227,7 @@ No need to manually save - your work is always protected.
 Work on multiple projects simultaneously:
 - Switch between projects instantly
 - Each project maintains its own context
-- Stage progress is tracked per project
+- Phase progress is tracked per project
 
 ## Future Enhancements
 

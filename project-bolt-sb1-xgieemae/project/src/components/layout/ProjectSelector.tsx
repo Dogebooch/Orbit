@@ -256,7 +256,7 @@ export function ProjectSelector({ showNewProjectModal, onNewProjectModalClose }:
           <div className="flex-1 flex items-center gap-4">
             <div className="h-8 w-px bg-primary-700" />
             
-            {/* Stage Icons */}
+            {/* Phase Icons */}
             <div className="flex items-center gap-1">
               {stages.map((stage, index) => {
                 const Icon = stage.icon;
