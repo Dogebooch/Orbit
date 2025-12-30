@@ -1,0 +1,38 @@
+# Debug and log files
+.cursor/debug.log
+*.log
+debug.log
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+*.local
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Optional: Large documentation files (uncomment if you want to ignore PDFs)
+# *.pdf
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
