@@ -94,6 +94,9 @@ export function StrategyStage() {
   const [vision, setVision] = useState<VisionData>({ problem: '', target_user: '', success_metrics: '', target_level: 'mvp' });
   const [userProfile, setUserProfile] = useState<UserProfileData>({ primary_user: '', goal: '' });
   const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // Tech stack state
   const [techStack, setTechStack] = useState<TechStack>('');
@@ -117,9 +120,21 @@ export function StrategyStage() {
 
   useEffect(() => {
     if (currentProject) {
-      loadData();
+      setIsInitialLoad(true);
+      loadData().then(() => {
+        // Mark initial load as complete after a short delay to allow state to settle
+        setTimeout(() => setIsInitialLoad(false), 500);
+      });
     }
   }, [currentProject]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+    };
+  }, [autoSaveTimeout]);
 
   const loadData = async () => {
     if (!currentProject) return;
@@ -156,11 +171,154 @@ export function StrategyStage() {
     if (prdData) {
       setPrdContent(prdData.content || '');
       setOutOfScope(prdData.out_of_scope || '');
+      setTechStack(prdData.tech_stack || '');
+    }
+
+    // Load features from prd_features table
+    const { data: featuresData } = await supabase
+      .from('prd_features')
+      .select('*')
+      .eq('project_id', currentProject.id)
+      .order('order_index', { ascending: true });
+
+    if (featuresData && featuresData.length > 0) {
+      const loadedFeatures: Feature[] = featuresData.map((f) => ({
+        id: f.id,
+        name: f.name || '',
+        userStory: f.user_story || '',
+        priority: (f.priority as Feature['priority']) || 'should_have',
+        acceptanceCriteria: Array.isArray(f.acceptance_criteria) 
+          ? f.acceptance_criteria 
+          : f.acceptance_criteria ? [f.acceptance_criteria] : [''],
+      }));
+      setFeatures(loadedFeatures);
+      // Set first feature as expanded if available
+      if (loadedFeatures.length > 0) {
+        setExpandedFeature(loadedFeatures[0].id);
+      }
+    } else {
+      // Initialize with one empty feature if none exist
+      setFeatures([{ id: Date.now().toString(), name: '', userStory: '', priority: 'must_have', acceptanceCriteria: [''] }]);
+      setExpandedFeature(null);
+    }
+
+    // Load UI state from localStorage
+    const savedStep = localStorage.getItem(`strategy_step_${currentProject.id}`);
+    if (savedStep && STEPS.some(s => s.id === savedStep)) {
+      setCurrentStep(savedStep as StrategyStep);
+    }
+
+    const savedExpanded = localStorage.getItem(`strategy_expanded_${currentProject.id}`);
+    if (savedExpanded) {
+      setExpandedFeature(savedExpanded);
+    }
+
+    const savedQuickStart = localStorage.getItem(`strategy_quickstart_${currentProject.id}`);
+    if (savedQuickStart !== null) {
+      setShowQuickStart(savedQuickStart === 'true');
     }
   };
 
+  // Save strategy data with debouncing
+  const saveStrategyData = useCallback(async (silent = false) => {
+    if (!currentProject) return;
+
+    if (!silent) setSaving(true);
+    try {
+      // Save tech stack and out of scope to PRD
+      const { data: existingPrd } = await supabase
+        .from('prds')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+
+      if (existingPrd) {
+        await supabase
+          .from('prds')
+          .update({ 
+            tech_stack: techStack,
+            out_of_scope: outOfScope,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('project_id', currentProject.id);
+      } else {
+        await supabase.from('prds').insert({
+          project_id: currentProject.id,
+          tech_stack: techStack,
+          out_of_scope: outOfScope,
+        });
+      }
+
+      // Save features to prd_features table
+      if (features.length > 0) {
+        // Get existing features to determine which to delete
+        const { data: existingFeatures } = await supabase
+          .from('prd_features')
+          .select('id')
+          .eq('project_id', currentProject.id);
+
+        const existingIds = new Set(existingFeatures?.map(f => f.id) || []);
+        const currentIds = new Set(features.map(f => f.id));
+
+        // Delete features that are no longer in the list
+        const idsToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
+        if (idsToDelete.length > 0) {
+          await supabase
+            .from('prd_features')
+            .delete()
+            .in('id', idsToDelete);
+        }
+
+        // Upsert each feature
+        for (let i = 0; i < features.length; i++) {
+          const feature = features[i];
+          const featureData = {
+            project_id: currentProject.id,
+            name: feature.name,
+            user_story: feature.userStory,
+            priority: feature.priority,
+            acceptance_criteria: feature.acceptanceCriteria,
+            order_index: i,
+            updated_at: new Date().toISOString(),
+          };
+
+          // Check if feature exists (has UUID format) or is a new timestamp-based ID
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(feature.id);
+          
+          if (isUUID && existingIds.has(feature.id)) {
+            // Update existing feature
+            await supabase
+              .from('prd_features')
+              .update(featureData)
+              .eq('id', feature.id);
+          } else {
+            // Insert new feature (will get new UUID from database)
+            const { data: newFeature } = await supabase
+              .from('prd_features')
+              .insert(featureData)
+              .select('id')
+              .single();
+            
+            // Update local state with the new UUID if we got one
+            if (newFeature) {
+              setFeatures(prev => prev.map(f => 
+                f.id === feature.id ? { ...f, id: newFeature.id } : f
+              ));
+            }
+          }
+        }
+      }
+
+      setLastSaved(new Date());
+    } catch (err) {
+      console.error('Error saving strategy data:', err);
+    } finally {
+      if (!silent) setSaving(false);
+    }
+  }, [currentProject, techStack, outOfScope, features]);
+
   // Feature management
-  const addFeature = () => {
+  const addFeature = async () => {
     const newFeature: Feature = {
       id: Date.now().toString(),
       name: '',
@@ -170,14 +328,42 @@ export function StrategyStage() {
     };
     setFeatures([...features, newFeature]);
     setExpandedFeature(newFeature.id);
+    // Trigger auto-save
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
   };
 
-  const removeFeature = (id: string) => {
-    setFeatures(features.filter(f => f.id !== id));
+  const removeFeature = async (id: string) => {
+    const newFeatures = features.filter(f => f.id !== id);
+    setFeatures(newFeatures);
+    
+    // Delete from database immediately
+    if (currentProject) {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUUID) {
+        await supabase
+          .from('prd_features')
+          .delete()
+          .eq('id', id);
+      }
+    }
   };
 
   const updateFeature = (id: string, updates: Partial<Feature>) => {
     setFeatures(features.map(f => f.id === id ? { ...f, ...updates } : f));
+    // Trigger auto-save
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
   };
 
   const addAcceptanceCriteria = (featureId: string) => {
@@ -187,6 +373,14 @@ export function StrategyStage() {
       }
       return f;
     }));
+    // Trigger auto-save
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
   };
 
   const updateAcceptanceCriteria = (featureId: string, index: number, value: string) => {
@@ -198,6 +392,14 @@ export function StrategyStage() {
       }
       return f;
     }));
+    // Trigger auto-save
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
   };
 
   const removeAcceptanceCriteria = (featureId: string, index: number) => {
@@ -207,6 +409,14 @@ export function StrategyStage() {
       }
       return f;
     }));
+    // Trigger auto-save
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
   };
 
   // Generate PRD content
@@ -281,6 +491,9 @@ ${outOfScope || '- _No items marked as out of scope_'}
     setPrdContent(content);
     
     try {
+      // First save strategy data (tech stack, features, out of scope)
+      await saveStrategyData(true);
+      
       const { data: existing } = await supabase
         .from('prds')
         .select('id')
@@ -290,21 +503,28 @@ ${outOfScope || '- _No items marked as out of scope_'}
       if (existing) {
         await supabase
           .from('prds')
-          .update({ content, out_of_scope: outOfScope, updated_at: new Date().toISOString() })
+          .update({ 
+            content, 
+            out_of_scope: outOfScope, 
+            tech_stack: techStack,
+            updated_at: new Date().toISOString() 
+          })
           .eq('project_id', currentProject.id);
       } else {
         await supabase.from('prds').insert({
           project_id: currentProject.id,
           content,
           out_of_scope: outOfScope,
+          tech_stack: techStack,
         });
       }
+      setLastSaved(new Date());
     } catch (err) {
       console.error('Error saving PRD:', err);
     } finally {
       setSaving(false);
     }
-  }, [currentProject, generatePRDContent, outOfScope]);
+  }, [currentProject, generatePRDContent, outOfScope, techStack, saveStrategyData]);
 
   // Generate project context for launch file generators
   const projectContext: ProjectContext = {
@@ -338,6 +558,46 @@ ${outOfScope || '- _No items marked as out of scope_'}
   const currentStepIndex = STEPS.findIndex(s => s.id === currentStep);
   const canGoNext = currentStepIndex < STEPS.length - 1;
   const canGoPrev = currentStepIndex > 0;
+
+  // Auto-save on data changes (skip during initial load)
+  useEffect(() => {
+    if (!currentProject || isInitialLoad) return;
+    
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveStrategyData(true);
+    }, 2000);
+    setAutoSaveTimeout(timeout);
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [techStack, outOfScope, features, currentProject, isInitialLoad]);
+
+  // Save currentStep to localStorage
+  useEffect(() => {
+    if (currentProject) {
+      localStorage.setItem(`strategy_step_${currentProject.id}`, currentStep);
+    }
+  }, [currentStep, currentProject]);
+
+  // Save expandedFeature to localStorage
+  useEffect(() => {
+    if (currentProject && expandedFeature !== null) {
+      localStorage.setItem(`strategy_expanded_${currentProject.id}`, expandedFeature);
+    }
+  }, [expandedFeature, currentProject]);
+
+  // Save showQuickStart to localStorage
+  useEffect(() => {
+    if (currentProject) {
+      localStorage.setItem(`strategy_quickstart_${currentProject.id}`, showQuickStart.toString());
+    }
+  }, [showQuickStart, currentProject]);
 
   const goToStep = (step: StrategyStep) => {
     setCurrentStep(step);
@@ -375,13 +635,30 @@ ${outOfScope || '- _No items marked as out of scope_'}
   return (
     <div className="mx-auto space-y-8 max-w-5xl">
       <div>
-        <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
-          <ListChecks className="w-8 h-8 text-primary-400" />
-          Strategy: PRD & Launch
-        </h1>
-        <p className="mt-2 text-primary-400">
-          Define your tech stack, features, and choose how to build your project.
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="flex gap-3 items-center text-3xl font-bold text-primary-100">
+              <ListChecks className="w-8 h-8 text-primary-400" />
+              Strategy: PRD & Launch
+            </h1>
+            <p className="mt-2 text-primary-400">
+              Define your tech stack, features, and choose how to build your project.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {saving && (
+              <div className="flex items-center gap-2 text-sm text-primary-400">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Saving...</span>
+              </div>
+            )}
+            {lastSaved && !saving && (
+              <div className="text-xs text-primary-500">
+                Last saved: {lastSaved.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Step Progress */}
