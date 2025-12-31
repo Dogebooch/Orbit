@@ -44,7 +44,7 @@ interface MarkdownEditorProps {
   lastSavedMetrics?: Date;
 }
 
-type ActiveDocument = 'vision' | 'profile' | 'metrics';
+type ActiveDocument = 'vision' | 'profile' | 'metrics' | 'research';
 
 export function MarkdownEditor({
   vision,

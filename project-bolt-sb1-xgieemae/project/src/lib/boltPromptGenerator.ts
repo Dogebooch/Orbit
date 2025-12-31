@@ -33,6 +33,20 @@ interface Feature {
 
 type TechStack = string;
 
+interface ResearchApp {
+  name: string;
+  what_does_well: string;
+  what_does_poorly: string;
+  key_insight: string;
+}
+
+interface ResearchData {
+  apps: ResearchApp[];
+  patterns_to_borrow: string;
+  patterns_to_avoid: string;
+  opportunity_gap: string;
+}
+
 interface BoltPromptData {
   projectName: string;
   vision: VisionData;
@@ -40,6 +54,7 @@ interface BoltPromptData {
   features: Feature[];
   techStack: TechStack;
   outOfScope: string;
+  research?: ResearchData;
 }
 
 /**
@@ -53,6 +68,7 @@ export function generateBoltPrompt(data: BoltPromptData): string {
     features,
     techStack,
     outOfScope,
+    research,
   } = data;
 
   // Filter must-have and should-have features for MVP
@@ -103,6 +119,8 @@ ${generateFeaturesSection(mvpFeatures)}
 ## Out of Scope (Do NOT Build)
 
 ${outOfScope || 'Not specified'}
+
+${research ? generateResearchSection(research) : ''}
 
 ## Development Guidelines
 
@@ -183,6 +201,52 @@ function generateFeaturesSection(features: Feature[]): string {
       return section;
     })
     .join('\n\n');
+}
+
+/**
+ * Helper: Generate research section with competitive analysis
+ */
+function generateResearchSection(research: ResearchData): string {
+  let section = '\n## Research & Preferences\n\n';
+
+  if (research.apps && research.apps.length > 0) {
+    section += '### Competitive Research\n\n';
+    research.apps.forEach((app, index) => {
+      section += `#### ${index + 1}. ${app.name}\n\n`;
+      
+      if (app.what_does_well) {
+        section += `**What it does well:**\n${app.what_does_well}\n\n`;
+      }
+      
+      if (app.what_does_poorly) {
+        section += `**What it does poorly:**\n${app.what_does_poorly}\n\n`;
+      }
+      
+      if (app.key_insight) {
+        section += `**Key insight:** ${app.key_insight}\n\n`;
+      }
+    });
+  }
+
+  if (research.patterns_to_borrow) {
+    section += `### Patterns to Borrow\n\n${research.patterns_to_borrow}\n\n`;
+  }
+
+  if (research.patterns_to_avoid) {
+    section += `### Patterns to Avoid\n\n${research.patterns_to_avoid}\n\n`;
+  }
+
+  if (research.opportunity_gap) {
+    section += `### Opportunity Gap\n\n${research.opportunity_gap}\n\n`;
+  }
+
+  section += '**How to use this research:**\n';
+  section += '1. When implementing UI elements, check if any analyzed tool has a good solution and reference it explicitly\n';
+  section += '2. Before finalizing any design, check the "Patterns to Avoid" list to avoid documented anti-patterns\n';
+  section += '3. Consider whether your choices address the identified opportunity gap - that\'s your differentiator\n';
+  section += '4. Combine the best elements from multiple tools rather than copying any single one\n';
+
+  return section;
 }
 
 /**

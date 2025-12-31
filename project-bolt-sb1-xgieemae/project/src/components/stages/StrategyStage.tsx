@@ -132,6 +132,14 @@ export function StrategyStage() {
   const [showQuickStart, setShowQuickStart] = useState(true);
   const [downloadedFiles, setDownloadedFiles] = useState<string[]>([]);
 
+  // Research data state
+  const [researchData, setResearchData] = useState<{
+    apps: Array<{ name: string; what_does_well: string; what_does_poorly: string; key_insight: string }>;
+    patterns_to_borrow: string;
+    patterns_to_avoid: string;
+    opportunity_gap: string;
+  } | null>(null);
+
   useEffect(() => {
     if (currentProject) {
       setIsInitialLoad(true);
@@ -198,6 +206,47 @@ export function StrategyStage() {
       setPrdContent(prdData.content || '');
       setOutOfScope(prdData.out_of_scope || '');
       setTechStack(prdData.tech_stack || '');
+    }
+
+    // Load research data
+    const { data: researchApps } = await supabase
+      .from('research_apps')
+      .select('name, what_does_well, what_does_poorly, key_insight')
+      .eq('project_id', currentProject.id)
+      .order('order_index', { ascending: true });
+
+    const { data: researchNotes } = await supabase
+      .from('research_notes')
+      .select('section, content')
+      .eq('project_id', currentProject.id)
+      .is('app_id', null);
+
+    if (researchApps || researchNotes) {
+      const research: {
+        apps: Array<{ name: string; what_does_well: string; what_does_poorly: string; key_insight: string }>;
+        patterns_to_borrow: string;
+        patterns_to_avoid: string;
+        opportunity_gap: string;
+      } = {
+        apps: researchApps || [],
+        patterns_to_borrow: '',
+        patterns_to_avoid: '',
+        opportunity_gap: '',
+      };
+
+      if (researchNotes) {
+        researchNotes.forEach((note) => {
+          if (note.section === 'patterns_to_borrow') {
+            research.patterns_to_borrow = note.content || '';
+          } else if (note.section === 'patterns_to_avoid') {
+            research.patterns_to_avoid = note.content || '';
+          } else if (note.section === 'opportunity_gap') {
+            research.opportunity_gap = note.content || '';
+          }
+        });
+      }
+
+      setResearchData(research);
     }
 
     // Load features from prd_features table
@@ -610,6 +659,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
     features,
     techStack,
     outOfScope,
+    research: researchData || undefined,
   };
 
   // Check if we have minimum required data
@@ -690,6 +740,82 @@ ${outOfScope || '- _No items marked as out of scope_'}
     must_have: { label: 'Must Have', color: 'text-red-400 bg-red-900/30 border-red-700/50' },
     should_have: { label: 'Should Have', color: 'text-amber-400 bg-amber-900/30 border-amber-700/50' },
     nice_to_have: { label: 'Nice to Have', color: 'text-green-400 bg-green-900/30 border-green-700/50' },
+  };
+
+  // Helper function to format Target Level labels
+  const formatTargetLevel = (level: string): { label: string; description: string } => {
+    const levels: Record<string, { label: string; description: string }> = {
+      poc: { label: 'Proof of Concept', description: 'Demonstrates core functionality. May have rough edges, limited error handling.' },
+      mvp: { label: 'MVP (Minimum Viable Product)', description: 'Minimally viable for real users to test. Core features work reliably.' },
+      demo: { label: 'Polished Demo', description: 'Ready for presentations or investor demos. Looks professional, handles common paths well.' },
+      production: { label: 'Production Ready', description: 'Can handle real users and edge cases. Proper error handling, security, performance.' },
+    };
+    return levels[level] || { label: level, description: 'Target level not specified' };
+  };
+
+  // Generate AI prompt for MVP features generation
+  const generateFeaturesPrompt = (): string => {
+    const targetLevelInfo = formatTargetLevel(vision.target_level || 'mvp');
+    
+    return `You are an expert product manager helping to define MVP features for a software project. Based on the following foundation data, generate a comprehensive list of MVP features.
+
+## Project Foundation
+
+### Problem Statement
+${vision.problem || 'Not specified'}
+
+### Target User
+${vision.target_user || 'Not specified'}
+
+### User Profile
+- **Primary User:** ${userProfile.primary_user || 'Not specified'}
+- **User Goal:** ${userProfile.goal || 'Not specified'}
+- **Context of Use:** ${userProfile.context || 'Not specified'}
+- **Key Frustrations:** ${userProfile.frustrations || 'Not specified'}
+- **Technical Comfort Level:** ${userProfile.technical_comfort || 'medium'}
+
+### Technical Stack
+${techStack || 'Not specified'}
+
+### Target Level
+${targetLevelInfo.label}: ${targetLevelInfo.description}
+
+## Your Task
+
+Generate MVP features that:
+1. **Directly address the problem statement** - Each feature should solve a specific aspect of the core problem
+2. **Support the user's goal** - Features should help the user achieve their stated goal
+3. **Consider user context** - Take into account when, where, and how the user will use this
+4. **Respect technical comfort level** - Match the complexity to the user's technical comfort
+5. **Prioritize appropriately** - Essential features for solving the core problem should be "must_have", supporting features "should_have", and enhancements "nice_to_have"
+
+## Output Format
+
+Return a JSON array of features with this EXACT structure (no markdown, just JSON):
+
+[
+  {
+    "name": "Feature name (concise, action-oriented)",
+    "priority": "must_have" | "should_have" | "nice_to_have",
+    "userStory": "As a [user type], I want to [action] so that [benefit]",
+    "acceptanceCriteria": [
+      "Specific, testable criterion 1",
+      "Specific, testable criterion 2",
+      "Specific, testable criterion 3"
+    ]
+  }
+]
+
+## Guidelines
+
+- Generate 5-8 features total
+- Focus on features that solve the core problem first (must_have)
+- Each feature should have 2-4 acceptance criteria
+- User stories should be specific and user-focused
+- Acceptance criteria should be testable and measurable
+- Consider the target level when determining feature completeness
+
+Return ONLY the JSON array, no additional text or markdown code blocks.`;
   };
 
   const hasValidFeatures = features.some(f => f.name.trim() !== '');
@@ -775,6 +901,56 @@ ${outOfScope || '- _No items marked as out of scope_'}
                 rows={3}
                 className="bg-primary-800"
               />
+            </div>
+
+            {/* AI Prompt Generator for MVP Features */}
+            <div className="p-4 rounded-lg border bg-blue-900/20 border-blue-700/50">
+              <div className="flex gap-3 items-start mb-4">
+                <Sparkles className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="mb-2 font-medium text-blue-300">Generate MVP Features with AI</h4>
+                  <p className="text-sm text-blue-200/80 mb-3">
+                    Copy the prompt below and paste it into Gemini or Claude to automatically generate MVP features based on your Foundation data.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-primary-300">AI Features Generation Prompt</label>
+                <Button
+                  onClick={() => {
+                    const prompt = generateFeaturesPrompt();
+                    navigator.clipboard.writeText(prompt);
+                    setCopied('features');
+                    setTimeout(() => setCopied(null), 2000);
+                  }}
+                  variant="secondary"
+                  size="sm"
+                >
+                  {copied === 'features' ? (
+                    <>
+                      <Check className="mr-1 w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-1 w-4 h-4" />
+                      Copy Prompt
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Textarea
+                value={generateFeaturesPrompt()}
+                readOnly
+                rows={25}
+                className="font-mono text-xs bg-primary-900/50 border-primary-700"
+              />
+              <p className="mt-2 text-xs text-primary-400">
+                Paste this prompt into Gemini or Claude. The AI will return a JSON array of features that you can then import into the table below.
+              </p>
             </div>
 
             <div className="flex justify-between items-center">
@@ -979,6 +1155,31 @@ ${outOfScope || '- _No items marked as out of scope_'}
                     <li>Paste into Bolt.new and generate your project</li>
                     <li>Download the generated project and extract it</li>
                   </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Target Level Display */}
+            <div className="p-4 rounded-lg border bg-purple-900/20 border-purple-700/50">
+              <div className="flex gap-3 items-start">
+                <Settings className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="font-medium text-purple-300">Target Level</h4>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-800/50 text-purple-200 border border-purple-700/50">
+                      {formatTargetLevel(vision.target_level || 'mvp').label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-purple-200/80 mb-2">
+                    {formatTargetLevel(vision.target_level || 'mvp').description}
+                  </p>
+                  <div className="space-y-1 text-xs text-purple-200/70">
+                    <p><strong className="text-purple-300">Source:</strong> Set in the Vision stage (0_vision.md)</p>
+                    <p><strong className="text-purple-300">Impact:</strong> This affects how Bolt.new generates code - the level determines code completeness, error handling, and production readiness.</p>
+                    <p className="mt-2 italic">
+                      Need to change it? Go back to the Vision stage and update your Target Level setting.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -5,10 +5,11 @@ import { Button, Card } from '../ui';
 import { Lightbulb, Download, CheckCircle, ChevronRight, FileCode, Sparkles, X } from 'lucide-react';
 import { MarkdownEditor } from './vision/MarkdownEditor';
 import { ProjectFilesEditor } from './vision/ProjectFilesEditor';
+import { ResearchTab } from './vision/ResearchTab';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToSuccessMetrics } from '../../utils/markdownUtils';
 import { hashFoundationData } from '../../config/fileTemplates';
 
-type ActiveDocument = 'vision' | 'profile' | 'metrics';
+type ActiveDocument = 'vision' | 'profile' | 'metrics' | 'research';
 
 interface VisionData {
   problem: string;
@@ -58,9 +59,11 @@ export function VisionStage() {
   const [savingVision, setSavingVision] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingMetrics, setSavingMetrics] = useState(false);
+  const [savingResearch, setSavingResearch] = useState(false);
   const [lastSavedVision, setLastSavedVision] = useState<Date | undefined>();
   const [lastSavedProfile, setLastSavedProfile] = useState<Date | undefined>();
   const [lastSavedMetrics, setLastSavedMetrics] = useState<Date | undefined>();
+  const [lastSavedResearch, setLastSavedResearch] = useState<Date | undefined>();
   
   // Success metrics markdown state (used when saving)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -367,6 +370,22 @@ export function VisionStage() {
     }
   }, [currentProject, vision]);
 
+  // Save research document
+  const handleSaveResearch = useCallback(async () => {
+    if (!currentProject) return;
+    
+    setSavingResearch(true);
+    try {
+      // Research data is saved by ResearchTab component itself
+      // This is just a callback to update the save state
+      setLastSavedResearch(new Date());
+    } catch (err) {
+      console.error('Error saving research:', err);
+    } finally {
+      setSavingResearch(false);
+    }
+  }, [currentProject]);
+
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimeout) {
       clearTimeout(autoSaveTimeout);
@@ -427,7 +446,7 @@ export function VisionStage() {
   const isComplete = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
 
   const handleNextDocument = () => {
-    const documentOrder: ActiveDocument[] = ['vision', 'profile', 'metrics'];
+    const documentOrder: ActiveDocument[] = ['vision', 'profile', 'metrics', 'research'];
     const currentIndex = documentOrder.indexOf(activeDocument);
     const nextIndex = (currentIndex + 1) % documentOrder.length;
     setActiveDocument(documentOrder[nextIndex]);
@@ -440,6 +459,8 @@ export function VisionStage() {
       case 'profile':
         return 'Next: 2_success_metrics.md';
       case 'metrics':
+        return 'Next: Research';
+      case 'research':
         return 'Back to: 0_vision.md';
     }
   };
@@ -527,6 +548,40 @@ export function VisionStage() {
 
       <Card>
         <div className="flex items-center justify-between mb-6 -mx-6 -mt-6 px-6 py-4 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
+          <div className="flex gap-2">
+            <Button
+              variant={activeDocument === 'vision' ? 'primary' : 'ghost'}
+              onClick={() => setActiveDocument('vision')}
+              size="sm"
+            >
+              <FileCode className="w-4 h-4 mr-2 text-amber-400" />
+              0_vision.md
+            </Button>
+            <Button
+              variant={activeDocument === 'profile' ? 'primary' : 'ghost'}
+              onClick={() => setActiveDocument('profile')}
+              size="sm"
+            >
+              <FileCode className="w-4 h-4 mr-2 text-blue-400" />
+              1_user_profile.md
+            </Button>
+            <Button
+              variant={activeDocument === 'metrics' ? 'primary' : 'ghost'}
+              onClick={() => setActiveDocument('metrics')}
+              size="sm"
+            >
+              <FileCode className="w-4 h-4 mr-2 text-green-400" />
+              2_success_metrics.md
+            </Button>
+            <Button
+              variant={activeDocument === 'research' ? 'primary' : 'ghost'}
+              onClick={() => setActiveDocument('research')}
+              size="sm"
+            >
+              <FileCode className="w-4 h-4 mr-2 text-purple-400" />
+              Research
+            </Button>
+          </div>
           <div className="flex gap-3">
             <Button
               variant="ghost"
@@ -541,24 +596,32 @@ export function VisionStage() {
           </div>
         </div>
 
-        <MarkdownEditor
-          vision={vision}
-          userProfile={userProfile}
-          onVisionChange={handleVisionChange}
-          onUserProfileChange={handleUserProfileChange}
-          lastSaved={lastSaved}
-          activeDocument={activeDocument}
-          onActiveDocumentChange={setActiveDocument}
-          onSaveVision={handleSaveVision}
-          onSaveProfile={handleSaveProfile}
-          onSaveMetrics={handleSaveMetrics}
-          savingVision={savingVision}
-          savingProfile={savingProfile}
-          savingMetrics={savingMetrics}
-          lastSavedVision={lastSavedVision}
-          lastSavedProfile={lastSavedProfile}
-          lastSavedMetrics={lastSavedMetrics}
-        />
+        {activeDocument === 'research' ? (
+          <ResearchTab
+            onSave={handleSaveResearch}
+            saving={savingResearch}
+            lastSaved={lastSavedResearch}
+          />
+        ) : (
+          <MarkdownEditor
+            vision={vision}
+            userProfile={userProfile}
+            onVisionChange={handleVisionChange}
+            onUserProfileChange={handleUserProfileChange}
+            lastSaved={lastSaved}
+            activeDocument={activeDocument}
+            onActiveDocumentChange={setActiveDocument}
+            onSaveVision={handleSaveVision}
+            onSaveProfile={handleSaveProfile}
+            onSaveMetrics={handleSaveMetrics}
+            savingVision={savingVision}
+            savingProfile={savingProfile}
+            savingMetrics={savingMetrics}
+            lastSavedVision={lastSavedVision}
+            lastSavedProfile={lastSavedProfile}
+            lastSavedMetrics={lastSavedMetrics}
+          />
+        )}
       </Card>
 
       {!isComplete && (

@@ -178,7 +178,7 @@ Remember to tailor the content to the specific project described in the PRD inst
 // ============================================================================
 
 export function generateBoltMetaPrompt(context: ProjectContext): string {
-  const { projectName, vision, userProfile, features, techStack, outOfScope } = context;
+  const { projectName, vision, userProfile, features, techStack, outOfScope, research } = context;
 
   // Format features
   const mvpFeatures = features.filter(f => 
@@ -229,6 +229,18 @@ ${mvpFeatures.length > 0 ? mvpFeatures.map((f, i) => formatFeature(f, i)).join('
 
 ### Out of Scope (Do NOT Include)
 ${outOfScope || 'Nothing specified as out of scope'}
+
+${research ? `### Competitive Research & Preferences
+${research.apps && research.apps.length > 0 ? research.apps.map((app, i) => `
+**${i + 1}. ${app.name}**
+${app.what_does_well ? `- What it does well: ${app.what_does_well}` : ''}
+${app.what_does_poorly ? `- What it does poorly: ${app.what_does_poorly}` : ''}
+${app.key_insight ? `- Key insight: ${app.key_insight}` : ''}
+`).join('\n') : ''}
+${research.patterns_to_borrow ? `**Patterns to Borrow:**\n${research.patterns_to_borrow}\n` : ''}
+${research.patterns_to_avoid ? `**Patterns to Avoid:**\n${research.patterns_to_avoid}\n` : ''}
+${research.opportunity_gap ? `**Opportunity Gap:**\n${research.opportunity_gap}\n` : ''}
+` : ''}
 
 ### Target Scope
 ${vision.target_level === 'mvp' ? 'MVP - Minimum Viable Product (focus on core functionality)' : 
