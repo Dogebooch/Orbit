@@ -65,6 +65,8 @@ export type Database = {
           name: string;
           description: string;
           current_stage: string;
+          copilot_instructions?: string;
+          bootstrap_complete?: boolean;
           created_at: string;
           updated_at: string;
         };

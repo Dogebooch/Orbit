@@ -35,6 +35,7 @@ import {
   generatePRDPlaceholder,
   generateVisionMarkdown,
   generateUserProfileMarkdown,
+  generateBoltMetaPrompt,
   downloadFile,
   downloadJSON,
   type ProjectContext,
@@ -79,12 +80,16 @@ interface ParsedTask {
   selected: boolean;
 }
 
-type StrategyStep = 'features' | 'out_of_scope' | 'prepare_launch';
+type StrategyStep = 'features' | 'out_of_scope' | 'bootstrap' | 'copilot' | 'claude_md' | 'prd' | 'config';
 
 const STEPS: { id: StrategyStep; label: string; description: string }[] = [
-  { id: 'features', label: 'Features', description: 'Define your MVP features' },
+  { id: 'features', label: 'MVP Features', description: 'Define tech stack and features' },
   { id: 'out_of_scope', label: 'Out of Scope', description: 'What NOT to build' },
-  { id: 'prepare_launch', label: 'Prepare for Launch', description: 'Generate files and prompts' },
+  { id: 'bootstrap', label: 'Bootstrap', description: 'Generate codebase with Bolt.new' },
+  { id: 'copilot', label: 'Copilot Instructions', description: 'Generate AI instructions from codebase' },
+  { id: 'claude_md', label: 'CLAUDE.md', description: 'Generate project guidelines' },
+  { id: 'prd', label: 'PRD', description: 'Generate product requirements' },
+  { id: 'config', label: 'Config Files', description: 'Download TaskMaster config' },
 ];
 
 
@@ -110,13 +115,22 @@ export function StrategyStage() {
   // Out of scope state
   const [outOfScope, setOutOfScope] = useState('');
   
-  // Prepare for Launch state
-  const [copied, setCopied] = useState<string | null>(null);
-  const [showQuickStart, setShowQuickStart] = useState(true);
-  const [downloadedFiles, setDownloadedFiles] = useState<string[]>([]);
+  // Bootstrap state
+  const [bootstrapComplete, setBootstrapComplete] = useState(false);
+  
+  // Copilot instructions state
+  const [copilotInstructions, setCopilotInstructions] = useState('');
+  
+  // CLAUDE.md state
+  const [claudeMdContent, setClaudeMdContent] = useState('');
   
   // PRD state
   const [prdContent, setPrdContent] = useState('');
+  
+  // Config files state
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showQuickStart, setShowQuickStart] = useState(true);
+  const [downloadedFiles, setDownloadedFiles] = useState<string[]>([]);
 
   useEffect(() => {
     if (currentProject) {
@@ -138,6 +152,18 @@ export function StrategyStage() {
 
   const loadData = async () => {
     if (!currentProject) return;
+
+    // Load project data (for copilot_instructions and bootstrap_complete)
+    const { data: projectData } = await supabase
+      .from('projects')
+      .select('copilot_instructions, bootstrap_complete')
+      .eq('id', currentProject.id)
+      .maybeSingle();
+
+    if (projectData) {
+      setCopilotInstructions(projectData.copilot_instructions || '');
+      setBootstrapComplete(projectData.bootstrap_complete || false);
+    }
 
     // Load vision
     const { data: visionData } = await supabase
@@ -316,6 +342,42 @@ export function StrategyStage() {
       if (!silent) setSaving(false);
     }
   }, [currentProject, techStack, outOfScope, features]);
+
+  // Save copilot instructions
+  const saveCopilotInstructions = useCallback(async () => {
+    if (!currentProject) return;
+    
+    try {
+      await supabase
+        .from('projects')
+        .update({ 
+          copilot_instructions: copilotInstructions,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', currentProject.id);
+      setLastSaved(new Date());
+    } catch (err) {
+      console.error('Error saving copilot instructions:', err);
+    }
+  }, [currentProject, copilotInstructions]);
+
+  // Save bootstrap status
+  const saveBootstrapStatus = useCallback(async () => {
+    if (!currentProject) return;
+    
+    try {
+      await supabase
+        .from('projects')
+        .update({ 
+          bootstrap_complete: bootstrapComplete,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', currentProject.id);
+      setLastSaved(new Date());
+    } catch (err) {
+      console.error('Error saving bootstrap status:', err);
+    }
+  }, [currentProject, bootstrapComplete]);
 
   // Feature management
   const addFeature = async () => {
@@ -895,17 +957,189 @@ ${outOfScope || '- _No items marked as out of scope_'}
           </div>
         )}
 
-        {/* Step 4: Prepare for Launch */}
-        {currentStep === 'prepare_launch' && (
+        {/* Step 3: Bootstrap with Bolt */}
+        {currentStep === 'bootstrap' && (
           <div className="space-y-6">
             <div>
-              <h2 className="mb-2 text-xl font-semibold text-primary-100">Prepare for Launch</h2>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Bootstrap with Bolt.new</h2>
               <p className="text-sm text-primary-400">
-                Generate the prompts and files you need to build your project with AI.
+                Generate your codebase scaffold using Bolt.new. This creates a working project with your tech stack already configured.
               </p>
             </div>
 
-            {/* Validation Warning */}
+            <div className="p-4 rounded-lg border bg-cyan-900/20 border-cyan-700/50">
+              <div className="flex gap-3 items-start mb-4">
+                <Rocket className="w-5 h-5 text-cyan-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="mb-2 font-medium text-cyan-300">Instructions</h4>
+                  <ol className="space-y-2 text-sm text-cyan-200/80 list-decimal list-inside">
+                    <li>Copy the prompt below</li>
+                    <li>Paste it into Claude.ai or ChatGPT</li>
+                    <li>Copy Claude's optimized Bolt.new prompt</li>
+                    <li>Paste into Bolt.new and generate your project</li>
+                    <li>Download the generated project and extract it</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-primary-300">Bolt Meta-Prompt</label>
+                <Button
+                  onClick={() => {
+                    const prompt = generateBoltMetaPrompt(projectContext);
+                    navigator.clipboard.writeText(prompt);
+                    setCopied('bolt');
+                    setTimeout(() => setCopied(null), 2000);
+                  }}
+                  variant="secondary"
+                  size="sm"
+                >
+                  {copied === 'bolt' ? (
+                    <>
+                      <Check className="mr-1 w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-1 w-4 h-4" />
+                      Copy Prompt
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Textarea
+                value={generateBoltMetaPrompt(projectContext)}
+                readOnly
+                rows={15}
+                className="font-mono text-xs bg-primary-900/50 border-primary-700"
+              />
+            </div>
+
+            <div className="flex gap-3 items-center">
+              <Button
+                onClick={() => window.open('https://bolt.new', '_blank')}
+                className="bg-cyan-600 hover:bg-cyan-500"
+              >
+                <ExternalLink className="mr-2 w-4 h-4" />
+                Open Bolt.new
+              </Button>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bootstrapComplete}
+                  onChange={(e) => {
+                    setBootstrapComplete(e.target.checked);
+                    saveBootstrapStatus();
+                  }}
+                  className="w-4 h-4 rounded border-primary-600 bg-primary-800 text-cyan-600 focus:ring-cyan-500"
+                />
+                <span className="text-sm text-primary-300">I have downloaded my Bolt project</span>
+              </label>
+            </div>
+
+            <div className="p-4 rounded-lg border bg-amber-900/20 border-amber-700/50">
+              <div className="flex gap-3 items-start">
+                <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="mb-1 font-medium text-amber-300">Important</h4>
+                  <p className="text-sm text-amber-200/80">
+                    Make sure you've downloaded and extracted your Bolt project before continuing. 
+                    You'll need the actual codebase for the next step (Copilot Instructions).
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Generate Copilot Instructions */}
+        {currentStep === 'copilot' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Generate Copilot AI Instructions</h2>
+              <p className="text-sm text-primary-400">
+                Use GitHub Copilot to analyze your actual codebase and generate AI instructions describing what it found.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-lg border bg-purple-900/20 border-purple-700/50">
+              <div className="flex gap-3 items-start mb-4">
+                <Terminal className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="mb-2 font-medium text-purple-300">Instructions</h4>
+                  <ol className="space-y-2 text-sm text-purple-200/80 list-decimal list-inside">
+                    <li>Open your Bolt-generated project in VS Code</li>
+                    <li>Open the Copilot Chat panel (or use Command Palette)</li>
+                    <li>Find and run "Generate AI Instructions"</li>
+                    <li>Save the output to <code className="px-1 bg-primary-800 rounded">.github/copilot-instructions.md</code></li>
+                    <li>Paste the content below or upload the file</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium text-primary-300">
+                Copilot Instructions Content
+              </label>
+              <Textarea
+                value={copilotInstructions}
+                onChange={(e) => {
+                  setCopilotInstructions(e.target.value);
+                  // Auto-save after 2 seconds
+                  if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                  }
+                  const timeout = setTimeout(() => {
+                    saveCopilotInstructions();
+                  }, 2000);
+                  setAutoSaveTimeout(timeout);
+                }}
+                placeholder="Paste the content from .github/copilot-instructions.md here..."
+                rows={12}
+                className="font-mono text-xs bg-primary-800"
+              />
+              <p className="mt-2 text-xs text-primary-400">
+                This document describes your codebase's actual patterns, frameworks, and conventions.
+                It will be used to generate CLAUDE.md and improve PRD quality.
+              </p>
+            </div>
+
+            <div className="flex gap-3 items-center">
+              <Button
+                onClick={saveCopilotInstructions}
+                variant="secondary"
+                size="sm"
+              >
+                Save Instructions
+              </Button>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={copilotInstructions.length > 100}
+                  disabled
+                  className="w-4 h-4 rounded border-primary-600 bg-primary-800 text-purple-600"
+                />
+                <span className="text-sm text-primary-300">
+                  {copilotInstructions.length > 100 ? 'Instructions saved' : 'Paste instructions to continue'}
+                </span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Generate CLAUDE.md */}
+        {currentStep === 'claude_md' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Generate CLAUDE.md</h2>
+              <p className="text-sm text-primary-400">
+                Create your project guidelines file that Claude Code will automatically load into every conversation.
+              </p>
+            </div>
+
             {!hasRequiredData && (
               <div className="p-4 rounded-lg border bg-amber-900/20 border-amber-700/50">
                 <div className="flex gap-3 items-start">
@@ -920,6 +1154,165 @@ ${outOfScope || '- _No items marked as out of scope_'}
               </div>
             )}
 
+            <div className="p-4 rounded-lg border bg-green-900/20 border-green-700/50">
+              <div className="flex gap-3 items-start mb-4">
+                <FileText className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="mb-2 font-medium text-green-300">What is CLAUDE.md?</h4>
+                  <p className="text-sm text-green-200/80 mb-2">
+                    CLAUDE.md is your project's persistent context file. Claude Code automatically loads it into every conversation,
+                    so you don't have to re-explain your tech stack, coding standards, and constraints.
+                  </p>
+                  <p className="text-sm text-green-200/80">
+                    This file combines your foundation documents (vision, user profile, success metrics) with your actual codebase
+                    analysis (from Copilot instructions) to create comprehensive project guidelines.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {copilotInstructions && (
+              <div className="p-3 rounded-lg border bg-blue-900/20 border-blue-700/50">
+                <div className="flex gap-2 items-center text-sm text-blue-300">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Copilot instructions detected - will be included in CLAUDE.md</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                onClick={async () => {
+                  if (!currentProject) return;
+                  const projectData = await fetchProjectData(currentProject.id);
+                  if (projectData) {
+                    const content = generateClaudeMd(projectData, copilotInstructions || undefined);
+                    setClaudeMdContent(content);
+                    // Download the file
+                    const blob = new Blob([content], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'CLAUDE.md';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                }}
+                disabled={!hasRequiredData}
+                className="bg-green-600 hover:bg-green-500"
+              >
+                <Download className="mr-2 w-4 h-4" />
+                Generate & Download CLAUDE.md
+              </Button>
+            </div>
+
+            {claudeMdContent && (
+              <div>
+                <label className="block mb-2 text-sm font-medium text-primary-300">Preview</label>
+                <Textarea
+                  value={claudeMdContent}
+                  readOnly
+                  rows={20}
+                  className="font-mono text-xs bg-primary-900/50 border-primary-700"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 6: Generate PRD */}
+        {currentStep === 'prd' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Generate PRD</h2>
+              <p className="text-sm text-primary-400">
+                Create your Product Requirements Document that TaskMaster will use to generate your task list.
+              </p>
+            </div>
+
+            {!hasRequiredData && (
+              <div className="p-4 rounded-lg border bg-amber-900/20 border-amber-700/50">
+                <div className="flex gap-3 items-start">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="mb-2 font-medium text-amber-300">Complete Required Fields</h4>
+                    <p className="text-sm text-amber-200/80">
+                      Go back to the Foundation tab and complete: Problem Statement, Target User, Primary User, and User Goal.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {copilotInstructions && (
+              <div className="p-3 rounded-lg border bg-blue-900/20 border-blue-700/50">
+                <div className="flex gap-2 items-center text-sm text-blue-300">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Copilot instructions will be included in PRD generation prompt</span>
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 rounded-lg border bg-purple-900/20 border-purple-700/50">
+              <div className="flex gap-3 items-start mb-4">
+                <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="mb-2 font-medium text-purple-300">PRD Generation</h4>
+                  <p className="text-sm text-purple-200/80 mb-3">
+                    Use the PRD Generator Prompt from the Prompt Library. It will combine your foundation documents
+                    {copilotInstructions && ' and copilot instructions'} to create a comprehensive PRD.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      setCurrentStage('promptlibrary');
+                      sessionStorage.setItem('promptLibraryFilter', 'prd');
+                    }}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    <BookMarked className="mr-2 w-4 h-4" />
+                    View PRD Generator Prompt
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-primary-300">PRD Content</label>
+                <Button
+                  onClick={savePRD}
+                  variant="secondary"
+                  size="sm"
+                  disabled={!hasValidFeatures}
+                >
+                  Save PRD
+                </Button>
+              </div>
+              <Textarea
+                value={prdContent}
+                onChange={(e) => setPrdContent(e.target.value)}
+                placeholder="Paste your generated PRD here, or use the PRD Generator Prompt from the Prompt Library..."
+                rows={20}
+                className="font-mono text-xs bg-primary-800"
+              />
+              <p className="mt-2 text-xs text-primary-400">
+                Save this PRD to <code className="px-1 bg-primary-800 rounded">scripts/prd.txt</code> in your project for TaskMaster integration.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 7: Download Config Files */}
+        {currentStep === 'config' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="mb-2 text-xl font-semibold text-primary-100">Download Config Files</h2>
+              <p className="text-sm text-primary-400">
+                Download TaskMaster and MCP configuration files for your project.
+              </p>
+            </div>
+
             {/* Quick Start Guide (Collapsible) */}
             <div className="overflow-hidden rounded-xl border border-primary-700">
               <button
@@ -928,7 +1321,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
               >
                 <div className="flex gap-3 items-center">
                   <Lightbulb className="w-5 h-5 text-amber-400" />
-                  <span className="font-medium text-primary-100">Quick Start Guide - Vibe Coding Workflow</span>
+                  <span className="font-medium text-primary-100">Quick Start Guide - DougHub Workflow</span>
                 </div>
                 {showQuickStart ? (
                   <ChevronUp className="w-5 h-5 text-primary-400" />
@@ -943,33 +1336,40 @@ ${outOfScope || '- _No items marked as out of scope_'}
                     <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
                       <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center flex-shrink-0">1</span>
                       <div>
-                        <p className="text-primary-200 font-medium">Go to Prompt Library → Find "PRD Generator Prompt"</p>
-                        <p className="text-xs text-primary-400">Copy and paste into Claude.ai or ChatGPT</p>
+                        <p className="text-primary-200 font-medium">Define MVP features and tech stack</p>
+                        <p className="text-xs text-primary-400">Complete the Features and Out of Scope steps</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
-                      <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center flex-shrink-0">2</span>
+                      <span className="w-6 h-6 rounded-full bg-cyan-600 text-white text-xs flex items-center justify-center flex-shrink-0">2</span>
                       <div>
-                        <p className="text-primary-200 font-medium">Save AI's response as <code className="px-1 bg-primary-800 rounded">scripts/prd.txt</code></p>
-                        <p className="text-xs text-primary-400">This becomes TaskMaster's input</p>
+                        <p className="text-primary-200 font-medium">Generate Bolt prompt → Use Bolt.new → Download project</p>
+                        <p className="text-xs text-primary-400">Extract the project before continuing</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
-                      <span className="w-6 h-6 rounded-full bg-cyan-600 text-white text-xs flex items-center justify-center flex-shrink-0">3</span>
+                      <span className="w-6 h-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center flex-shrink-0">3</span>
                       <div>
-                        <p className="text-primary-200 font-medium">Go to Prompt Library → Find "Bolt.new Prompt Generator"</p>
-                        <p className="text-xs text-primary-400">Copy and paste into Claude to get optimized Bolt.new prompt</p>
+                        <p className="text-primary-200 font-medium">Open project in VSCode → Generate Copilot instructions</p>
+                        <p className="text-xs text-primary-400">Save to .github/copilot-instructions.md</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
-                      <span className="w-6 h-6 rounded-full bg-cyan-600 text-white text-xs flex items-center justify-center flex-shrink-0">4</span>
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0">4</span>
                       <div>
-                        <p className="text-primary-200 font-medium">Paste Claude's output into Bolt.new</p>
-                        <p className="text-xs text-primary-400">Download the generated project</p>
+                        <p className="text-primary-200 font-medium">Generate CLAUDE.md</p>
+                        <p className="text-xs text-primary-400">Using foundation docs + copilot instructions</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
-                      <span className="w-6 h-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center flex-shrink-0">5</span>
+                      <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center flex-shrink-0">5</span>
+                      <div>
+                        <p className="text-primary-200 font-medium">Generate PRD</p>
+                        <p className="text-xs text-primary-400">Using foundation docs + copilot instructions</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 bg-primary-900/50 rounded-lg">
+                      <span className="w-6 h-6 rounded-full bg-violet-600 text-white text-xs flex items-center justify-center flex-shrink-0">6</span>
                       <div>
                         <p className="text-primary-200 font-medium">Download config files → Place in project</p>
                         <p className="text-xs text-primary-400">Then run <code className="px-1 bg-primary-800 rounded">claude</code> in terminal</p>
@@ -980,91 +1380,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
               )}
             </div>
 
-            {/* Section A: AI Prompts */}
-            <div className="space-y-4">
-              <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                AI Prompts
-                <span className="ml-2 text-xs font-normal text-primary-400">Find prompts in the Prompt Library</span>
-              </h3>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {/* PRD Prompts Link */}
-                <div className="p-4 rounded-xl border bg-purple-900/20 border-purple-700/50">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="flex gap-2 items-center font-medium text-purple-200">
-                        <FileText className="w-4 h-4 text-purple-400" />
-                        PRD Generator Prompts
-                      </h4>
-                      <p className="mt-1 text-xs text-purple-300/70">
-                        Find PRD creation prompts in the Prompt Library
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-purple-200/60 mb-3">
-                    All PRD prompts are available in the Prompt Library, including the full PRD generator template.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      setCurrentStage('promptlibrary');
-                      // Store category filter in sessionStorage to auto-filter when library opens
-                      sessionStorage.setItem('promptLibraryFilter', 'prd');
-                    }}
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                  >
-                    <BookMarked className="mr-2 w-4 h-4" />
-                    View PRD Prompts in Library
-                  </Button>
-                </div>
-
-                {/* Bolt Prompts Link */}
-                <div className="p-4 rounded-xl border bg-cyan-900/20 border-cyan-700/50">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="flex gap-2 items-center font-medium text-cyan-200">
-                        <Rocket className="w-4 h-4 text-cyan-400" />
-                        Bolt.new Prompts
-                      </h4>
-                      <p className="mt-1 text-xs text-cyan-300/70">
-                        Find Bolt prompt generators in the Prompt Library
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs text-cyan-200/60">
-                      All Bolt.new prompts are available in the Prompt Library.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => {
-                          setCurrentStage('promptlibrary');
-                          sessionStorage.setItem('promptLibraryFilter', 'bolt');
-                        }}
-                        variant="secondary"
-                        size="sm"
-                        className="flex-1"
-                      >
-                        <BookMarked className="mr-2 w-4 h-4" />
-                        View Bolt Prompts
-                      </Button>
-                      <Button
-                        onClick={() => window.open('https://bolt.new', '_blank')}
-                        size="sm"
-                        className="text-xs bg-cyan-600 hover:bg-cyan-500"
-                      >
-                        <ExternalLink className="mr-1 w-3 h-3" />
-                        Open Bolt.new
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Section B: Download Project Files */}
+            {/* Section: Download Project Files */}
             <div className="space-y-4">
               <h3 className="flex gap-2 items-center text-lg font-semibold text-primary-100">
                 <FileText className="w-5 h-5 text-green-400" />
@@ -1083,7 +1399,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                       if (currentProject) {
                         const projectData = await fetchProjectData(currentProject.id);
                         if (projectData) {
-                          zip.file('CLAUDE.md', generateClaudeMd(projectData));
+                          zip.file('CLAUDE.md', generateClaudeMd(projectData, copilotInstructions || undefined));
                         }
                       }
                       zip.file('0_vision.md', generateVisionMarkdown(projectContext.vision, projectContext.projectName));
@@ -1095,7 +1411,7 @@ ${outOfScope || '- _No items marked as out of scope_'}
                       zip.file('.mcp.json', generateMCPConfig());
                       
                       const scripts = zip.folder('scripts');
-                      scripts?.file('prd.txt', generatePRDPlaceholder(projectContext.projectName));
+                      scripts?.file('prd.txt', prdContent || generatePRDPlaceholder(projectContext.projectName));
                       
                       // Generate and download
                       const blob = await zip.generateAsync({ type: 'blob' });
@@ -1148,9 +1464,10 @@ ${outOfScope || '- _No items marked as out of scope_'}
                 </div>
               </div>
             </div>
-
           </div>
         )}
+
+        {/* Legacy step removed - replaced by bootstrap, copilot, claude_md, prd, and config steps */}
       </Card>
 
       {/* Navigation */}

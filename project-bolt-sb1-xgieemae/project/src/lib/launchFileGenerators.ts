@@ -55,7 +55,7 @@ export interface ProjectContext {
 // Based on the Vibe Coding guide's PRD creation template
 // ============================================================================
 
-export function generatePRDPrompt(context: ProjectContext): string {
+export function generatePRDPrompt(context: ProjectContext, copilotInstructions?: string): string {
   const { projectName, vision, userProfile, features, techStack, outOfScope } = context;
 
   // Format features into requirements list
@@ -123,6 +123,7 @@ ${vision.target_level === 'mvp' ? 'MVP - Minimum Viable Product' :
   vision.target_level === 'prototype' ? 'Prototype - Quick validation' :
   vision.target_level === 'production' ? 'Production - Full feature set' : 
   'MVP'}
+${copilotInstructions ? `\n\n## Copilot AI Instructions (Codebase Analysis)\n${copilotInstructions.substring(0, 2000)}${copilotInstructions.length > 2000 ? '\n\n...(truncated - see .github/copilot-instructions.md for full content)' : ''}` : ''}
 </prd_instructions>
 
 Follow these steps to create the PRD:
@@ -138,8 +139,9 @@ Follow these steps to create the PRD:
    d. Target Audience
    e. Features and Requirements
    f. User Stories and Acceptance Criteria
-   g. Technical Requirements / Stack
+   g. Technical Requirements / Stack${copilotInstructions ? ' (use Copilot AI Instructions as ground truth for what actually exists)' : ''}
    h. Design and User Interface
+${copilotInstructions ? '\n4. If Copilot AI Instructions are provided, use them as the authoritative source for:\n   - Technical stack and frameworks actually in use\n   - File organization patterns\n   - Coding conventions and patterns\n   - Architecture decisions already made' : ''}
 
 4. For each section, provide detailed and relevant information based on the PRD instructions. Ensure that you:
    - Use clear and concise language
