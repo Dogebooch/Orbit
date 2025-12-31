@@ -3,6 +3,8 @@ import { Button, AIHelperButton } from '../../ui';
 import { FileText, RefreshCw } from 'lucide-react';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile, markdownToSuccessMetrics } from '../../../utils/markdownUtils';
 import type { ContentType } from '../../../lib/gemini';
+import { PromptHelper } from './PromptHelper';
+import { VISION_PROMPT, USER_PROFILE_PROMPT, SUCCESS_METRICS_PROMPT } from './prompts';
 
 interface VisionData {
   problem: string;
@@ -239,8 +241,46 @@ Make metrics specific and measurable. Include at least one usability metric and 
     }
   };
 
+  const getPromptHelper = () => {
+    if (activeDoc === 'vision') {
+      return (
+        <PromptHelper
+          prompt={VISION_PROMPT}
+          documentName="Vision Document"
+          fileName="0_vision.md"
+          title="Generate Your Vision Document with AI"
+          description="Use this prompt to have Claude (or any AI) guide you through creating your vision document step-by-step."
+          iconColor="amber"
+        />
+      );
+    } else if (activeDoc === 'profile') {
+      return (
+        <PromptHelper
+          prompt={USER_PROFILE_PROMPT}
+          documentName="User Profile"
+          fileName="1_user_profile.md"
+          title="Generate Your User Profile with AI"
+          description="Use this prompt to have Claude (or any AI) guide you through creating your user profile step-by-step."
+          iconColor="blue"
+        />
+      );
+    } else {
+      return (
+        <PromptHelper
+          prompt={SUCCESS_METRICS_PROMPT}
+          documentName="Success Metrics"
+          fileName="2_success_metrics.md"
+          title="Generate Your Success Metrics with AI"
+          description="Use this prompt to have Claude (or any AI) guide you through creating your success metrics step-by-step."
+          iconColor="green"
+        />
+      );
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {getPromptHelper()}
       <div className="flex items-center justify-between -mx-6 px-6 py-3 bg-slate-800/50 border-b border-slate-700 rounded-t-lg">
         <div className="flex gap-2">
           <Button
