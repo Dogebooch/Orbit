@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Button, Card, useFirstVisit } from '../ui';
+import { Button, Card } from '../ui';
 import { Lightbulb, Download, CheckCircle, ChevronRight, FileCode, Sparkles, X } from 'lucide-react';
 import { MarkdownEditor } from './vision/MarkdownEditor';
 import { ProjectFilesEditor } from './vision/ProjectFilesEditor';
-import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown } from '../../utils/markdownUtils';
+import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToSuccessMetrics } from '../../utils/markdownUtils';
 import { hashFoundationData } from '../../config/fileTemplates';
 
 type ActiveDocument = 'vision' | 'profile' | 'metrics';
@@ -48,10 +48,23 @@ export function VisionStage() {
     persona_role: '',
     competitor_notes: '',
   });
-  const [saving, setSaving] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [saving, setSaving] = useState(false); // Used in saveData for auto-save
   const [lastSaved, setLastSaved] = useState<Date | undefined>();
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [activeDocument, setActiveDocument] = useState<ActiveDocument>('vision');
+  
+  // Per-document saving state
+  const [savingVision, setSavingVision] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingMetrics, setSavingMetrics] = useState(false);
+  const [lastSavedVision, setLastSavedVision] = useState<Date | undefined>();
+  const [lastSavedProfile, setLastSavedProfile] = useState<Date | undefined>();
+  const [lastSavedMetrics, setLastSavedMetrics] = useState<Date | undefined>();
+  
+  // Success metrics markdown state (used when saving)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [successMetricsMarkdown, setSuccessMetricsMarkdown] = useState<string>(''); // Used in saveData and handleSaveMetrics
   
   // Project Files Generator state
   type ProjectFileType = 'claude' | 'cursorrules' | 'copilot';
@@ -62,6 +75,7 @@ export function VisionStage() {
     if (currentProject) {
       loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
   useEffect(() => {
@@ -110,19 +124,26 @@ export function VisionStage() {
       });
     }
 
-    // Load project config to check which files have been generated
-    const { data: configData } = await supabase
-      .from('project_configs')
+    // Load success_metrics table data
+    const { data: successMetricsData } = await supabase
+      .from('success_metrics')
       .select('*')
       .eq('project_id', currentProject.id)
       .maybeSingle();
 
-    if (configData) {
-      const generated = new Set<ProjectFileType>();
-      // Check if files exist in config (we'll store file content in a separate field or table)
-      // For now, if config exists, assume files might have been generated
-      // This is a simplified check - in production you might want to store file status separately
+    if (successMetricsData) {
+      // Load markdown content if available
+      if (successMetricsData.markdown_content) {
+        setSuccessMetricsMarkdown(successMetricsData.markdown_content);
+      }
+      // Update vision with target_level from success_metrics if available
+      if (successMetricsData.target_level) {
+        setVision(prev => ({ ...prev, target_level: successMetricsData.target_level || 'mvp' }));
+      }
     }
+
+    // Note: Project config loading is handled elsewhere
+    // This section can be expanded to load generated file status if needed
   };
 
   const saveData = useCallback(async (silent = false) => {
@@ -132,6 +153,7 @@ export function VisionStage() {
     try {
       const visionMarkdown = visionToMarkdown(vision);
       const profileMarkdown = userProfileToMarkdown(userProfile);
+      const metricsMarkdown = successMetricsToMarkdown(vision);
 
       const { data: existingVision } = await supabase
         .from('visions')
@@ -179,6 +201,38 @@ export function VisionStage() {
         });
       }
 
+      // Save success_metrics
+      const parsed = markdownToSuccessMetrics(metricsMarkdown);
+      const criteria = vision.success_metrics 
+        ? vision.success_metrics.split('\n').filter(line => line.trim()).map(line => line.replace(/^[-*]\s*/, '').replace(/^\d+\.\s*/, '').trim())
+        : [];
+      
+      const { data: existingMetrics } = await supabase
+        .from('success_metrics')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+
+      const metricsData = {
+        project_id: currentProject.id,
+        target_level: parsed.target_level || vision.target_level || 'mvp',
+        criteria: criteria,
+        validation_methods: [],
+        timeline: '',
+        markdown_content: metricsMarkdown,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingMetrics) {
+        await supabase
+          .from('success_metrics')
+          .update(metricsData)
+          .eq('project_id', currentProject.id);
+      } else {
+        await supabase.from('success_metrics').insert(metricsData);
+      }
+
+      setSuccessMetricsMarkdown(metricsMarkdown);
       setLastSaved(new Date());
     } catch (err) {
       console.error('Error saving data:', err);
@@ -186,6 +240,132 @@ export function VisionStage() {
       if (!silent) setSaving(false);
     }
   }, [currentProject, vision, userProfile]);
+
+  // Save vision document
+  const handleSaveVision = useCallback(async () => {
+    if (!currentProject) return;
+    
+    setSavingVision(true);
+    try {
+      const visionMarkdown = visionToMarkdown(vision);
+      
+      const { data: existingVision } = await supabase
+        .from('visions')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+
+      if (existingVision) {
+        await supabase
+          .from('visions')
+          .update({
+            ...vision,
+            markdown_content: visionMarkdown,
+            updated_at: new Date().toISOString()
+          })
+          .eq('project_id', currentProject.id);
+      } else {
+        await supabase.from('visions').insert({
+          project_id: currentProject.id,
+          ...vision,
+          markdown_content: visionMarkdown,
+        });
+      }
+      
+      setLastSavedVision(new Date());
+    } catch (err) {
+      console.error('Error saving vision:', err);
+    } finally {
+      setSavingVision(false);
+    }
+  }, [currentProject, vision]);
+
+  // Save user profile document
+  const handleSaveProfile = useCallback(async () => {
+    if (!currentProject) return;
+    
+    setSavingProfile(true);
+    try {
+      const profileMarkdown = userProfileToMarkdown(userProfile);
+      
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+
+      if (existingProfile) {
+        await supabase
+          .from('user_profiles')
+          .update({
+            ...userProfile,
+            markdown_content: profileMarkdown,
+            updated_at: new Date().toISOString()
+          })
+          .eq('project_id', currentProject.id);
+      } else {
+        await supabase.from('user_profiles').insert({
+          project_id: currentProject.id,
+          ...userProfile,
+          markdown_content: profileMarkdown,
+        });
+      }
+      
+      setLastSavedProfile(new Date());
+    } catch (err) {
+      console.error('Error saving profile:', err);
+    } finally {
+      setSavingProfile(false);
+    }
+  }, [currentProject, userProfile]);
+
+  // Save success metrics document
+  const handleSaveMetrics = useCallback(async () => {
+    if (!currentProject) return;
+    
+    setSavingMetrics(true);
+    try {
+      const metricsMarkdown = successMetricsToMarkdown(vision);
+      
+      // Parse metrics markdown to extract structured data
+      const parsed = markdownToSuccessMetrics(metricsMarkdown);
+      const criteria = vision.success_metrics 
+        ? vision.success_metrics.split('\n').filter(line => line.trim()).map(line => line.replace(/^[-*]\s*/, '').replace(/^\d+\.\s*/, '').trim())
+        : [];
+      
+      const { data: existingMetrics } = await supabase
+        .from('success_metrics')
+        .select('id')
+        .eq('project_id', currentProject.id)
+        .maybeSingle();
+
+      const metricsData = {
+        project_id: currentProject.id,
+        target_level: parsed.target_level || vision.target_level || 'mvp',
+        criteria: criteria,
+        validation_methods: [],
+        timeline: '',
+        markdown_content: metricsMarkdown,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingMetrics) {
+        await supabase
+          .from('success_metrics')
+          .update(metricsData)
+          .eq('project_id', currentProject.id);
+      } else {
+        await supabase.from('success_metrics').insert(metricsData);
+      }
+      
+      setSuccessMetricsMarkdown(metricsMarkdown);
+      setLastSavedMetrics(new Date());
+    } catch (err) {
+      console.error('Error saving metrics:', err);
+    } finally {
+      setSavingMetrics(false);
+    }
+  }, [currentProject, vision]);
 
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimeout) {
@@ -245,7 +425,6 @@ export function VisionStage() {
   };
 
   const isComplete = vision.problem && vision.target_user && userProfile.primary_user && userProfile.goal;
-  const isFirstVisit = useFirstVisit('vision');
 
   const handleNextDocument = () => {
     const documentOrder: ActiveDocument[] = ['vision', 'profile', 'metrics'];
@@ -370,6 +549,15 @@ export function VisionStage() {
           lastSaved={lastSaved}
           activeDocument={activeDocument}
           onActiveDocumentChange={setActiveDocument}
+          onSaveVision={handleSaveVision}
+          onSaveProfile={handleSaveProfile}
+          onSaveMetrics={handleSaveMetrics}
+          savingVision={savingVision}
+          savingProfile={savingProfile}
+          savingMetrics={savingMetrics}
+          lastSavedVision={lastSavedVision}
+          lastSavedProfile={lastSavedProfile}
+          lastSavedMetrics={lastSavedMetrics}
         />
       </Card>
 

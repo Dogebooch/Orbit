@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, AIHelperButton } from '../../ui';
-import { FileText, RefreshCw } from 'lucide-react';
+import { FileText, RefreshCw, Save, Loader2 } from 'lucide-react';
 import { visionToMarkdown, userProfileToMarkdown, successMetricsToMarkdown, markdownToVision, markdownToUserProfile, markdownToSuccessMetrics } from '../../../utils/markdownUtils';
 import type { ContentType } from '../../../lib/gemini';
 import { PromptHelper } from './PromptHelper';
@@ -33,6 +33,15 @@ interface MarkdownEditorProps {
   lastSaved?: Date;
   activeDocument?: ActiveDocument;
   onActiveDocumentChange?: (doc: ActiveDocument) => void;
+  onSaveVision?: () => void;
+  onSaveProfile?: () => void;
+  onSaveMetrics?: () => void;
+  savingVision?: boolean;
+  savingProfile?: boolean;
+  savingMetrics?: boolean;
+  lastSavedVision?: Date;
+  lastSavedProfile?: Date;
+  lastSavedMetrics?: Date;
 }
 
 type ActiveDocument = 'vision' | 'profile' | 'metrics';
@@ -45,6 +54,15 @@ export function MarkdownEditor({
   lastSaved,
   activeDocument,
   onActiveDocumentChange,
+  onSaveVision,
+  onSaveProfile,
+  onSaveMetrics,
+  savingVision,
+  savingProfile,
+  savingMetrics,
+  lastSavedVision,
+  lastSavedProfile,
+  lastSavedMetrics,
 }: MarkdownEditorProps) {
   const [activeDoc, setActiveDoc] = useState<ActiveDocument>(activeDocument || 'vision');
   
@@ -307,7 +325,92 @@ Make metrics specific and measurable. Include at least one usability metric and 
         </div>
 
         <div className="flex items-center gap-3">
-          {lastSaved && (
+          {/* Save button and status for current document */}
+          {activeDoc === 'vision' && onSaveVision && (
+            <div className="flex items-center gap-2">
+              {savingVision ? (
+                <div className="flex items-center gap-2 text-sm text-primary-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <>
+                  {lastSavedVision && (
+                    <span className="text-xs text-primary-500">
+                      Saved: {lastSavedVision.toLocaleTimeString()}
+                    </span>
+                  )}
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={onSaveVision}
+                    disabled={savingVision}
+                    title="Save vision document"
+                  >
+                    <Save className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          {activeDoc === 'profile' && onSaveProfile && (
+            <div className="flex items-center gap-2">
+              {savingProfile ? (
+                <div className="flex items-center gap-2 text-sm text-primary-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <>
+                  {lastSavedProfile && (
+                    <span className="text-xs text-primary-500">
+                      Saved: {lastSavedProfile.toLocaleTimeString()}
+                    </span>
+                  )}
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={onSaveProfile}
+                    disabled={savingProfile}
+                    title="Save user profile document"
+                  >
+                    <Save className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          {activeDoc === 'metrics' && onSaveMetrics && (
+            <div className="flex items-center gap-2">
+              {savingMetrics ? (
+                <div className="flex items-center gap-2 text-sm text-primary-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <>
+                  {lastSavedMetrics && (
+                    <span className="text-xs text-primary-500">
+                      Saved: {lastSavedMetrics.toLocaleTimeString()}
+                    </span>
+                  )}
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={onSaveMetrics}
+                    disabled={savingMetrics}
+                    title="Save success metrics document"
+                  >
+                    <Save className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          {lastSaved && !onSaveVision && !onSaveProfile && !onSaveMetrics && (
             <span className="text-sm text-primary-500">
               Last saved: {lastSaved.toLocaleTimeString()}
             </span>
