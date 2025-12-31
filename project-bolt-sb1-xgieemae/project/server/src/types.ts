@@ -84,3 +84,29 @@ export interface ConnectionInfo {
   connectedAt: Date;
 }
 
+// Project state for save/load
+export interface ProjectState {
+  project: {
+    id: string;
+    user_id: string;
+    name: string;
+    description: string;
+    current_stage: string;
+    copilot_instructions?: string;
+    bootstrap_complete?: boolean;
+    created_at: string;
+    updated_at: string;
+  };
+  vision: any | null;
+  userProfile: any | null;
+  successMetrics: any | null;
+  prd: any | null;
+  tasks: any[];
+  projectConfig: any | null;
+  prdFeatures: any[];
+  researchApps: any[];
+  researchSynthesis: any[];
+  savedAt: string;
+  version: string;
+}
+

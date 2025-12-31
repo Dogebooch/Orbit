@@ -22,7 +22,8 @@ import {
   removeConnection,
   setTerminalSession,
 } from './sessions';
-import type { ClientMessage, ServerMessage, TerminalSession } from './types';
+import type { ClientMessage, ServerMessage, TerminalSession, ProjectState } from './types';
+import { saveProjectState, loadProjectState } from './database';
 
 // Load environment variables
 dotenv.config();
@@ -31,9 +32,61 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 const server = http.createServer(app);
 
+// Middleware
+app.use(express.json());
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Project save endpoint
+app.post('/api/project/save', (req, res) => {
+  try {
+    const projectState: ProjectState = req.body;
+    
+    if (!projectState.project || !projectState.project.id) {
+      return res.status(400).json({ error: 'Invalid project state: missing project.id' });
+    }
+
+    // Update savedAt timestamp
+    projectState.savedAt = new Date().toISOString();
+    
+    // Save to JSON file
+    saveProjectState(projectState);
+
+    res.json({ 
+      success: true, 
+      message: 'Project state saved successfully',
+      savedAt: projectState.savedAt
+    });
+  } catch (error) {
+    console.error('[Server] Error saving project state:', error);
+    res.status(500).json({ 
+      error: 'Failed to save project state',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Project load endpoint
+app.get('/api/project/load/:projectId', (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const projectState = loadProjectState(projectId);
+    
+    if (!projectState) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    res.json(projectState);
+  } catch (error) {
+    console.error('[Server] Error loading project state:', error);
+    res.status(500).json({ 
+      error: 'Failed to load project state',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 // WebSocket server
@@ -231,6 +284,7 @@ server.listen(PORT, () => {
   console.log(`[Server] Orbit Terminal Server running on port ${PORT}`);
   console.log(`[Server] Health check: http://localhost:${PORT}/health`);
   console.log(`[Server] WebSocket: ws://localhost:${PORT}`);
+  console.log(`[Server] Storage: JSON files in ./data/projects/`);
 });
 
 // Graceful shutdown

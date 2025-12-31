@@ -12,8 +12,9 @@ import { PromptLibraryStage } from './components/stages/PromptLibraryStage';
 import { TestingStage } from './components/stages/TestingStage';
 import { SettingsStage } from './components/stages/SettingsStage';
 import { SetupGuideStage } from './components/stages/SetupGuideStage';
-import { CommandPalette, CommandIcons } from './components/ui';
+import { CommandPalette, CommandIcons, GlobalSaveButton } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useGlobalSave } from './hooks/useGlobalSave';
 import { AlertCircle, LayoutDashboard, Package } from 'lucide-react';
 
 function App() {
@@ -22,6 +23,9 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   // const projectSelectorRef = useRef<{ triggerNewProject: () => void } | null>(null);
+
+  // Global save hook
+  const { saveProject, saving, lastSaved, error } = useGlobalSave();
 
   // Sync localStage when currentStage changes from context (e.g., "Continue to Strategy" buttons)
   useEffect(() => {
@@ -38,6 +42,7 @@ function App() {
     onStageChange: handleStageChange,
     onNewProject: () => setShowNewProject(true),
     onCommandPalette: () => setShowCommandPalette(true),
+    onSave: () => saveProject(),
     onEscape: () => {
       setShowCommandPalette(false);
       setShowNewProject(false);
@@ -122,6 +127,16 @@ function App() {
         onClose={() => setShowCommandPalette(false)}
         commands={commands}
       />
+
+      {/* Global Save Button */}
+      {currentProject && (
+        <GlobalSaveButton
+          onSave={saveProject}
+          saving={saving}
+          lastSaved={lastSaved}
+          error={error}
+        />
+      )}
     </AuthGuard>
   );
 }

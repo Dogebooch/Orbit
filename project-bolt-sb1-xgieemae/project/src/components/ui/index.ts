@@ -11,3 +11,4 @@ export { Toast } from './Toast';
 export { AIHelperButton } from './AIHelperButton';
 export { Modal } from './Modal';
 export { Tooltip } from './Tooltip';
+export { GlobalSaveButton } from './GlobalSaveButton';
